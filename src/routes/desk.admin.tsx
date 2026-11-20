@@ -1,6 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ClipboardCheck, HandCoins, Sprout, Users } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Card, Page, TopBar, ugx } from "@/components/chrome";
+import { toast } from "sonner";
+import { useDeskSession } from "@/components/desk-shell";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/overlays";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  Skeleton,
+  StatCard,
+  Table,
+  TD,
+  TH,
+} from "@/components/ui";
 import {
   adminStats,
   decideListing,
@@ -12,135 +32,356 @@ import {
   type ActivityEntry,
   type Role,
 } from "@/lib/market.functions";
-import { useDesk } from "@/lib/use-desk";
+import { formatDate, ugx } from "@/lib/utils";
 
 export const Route = createFileRoute("/desk/admin")({ component: AdminPage });
 
 function AdminPage() {
-  const { profile } = useDesk();
+  const { profile } = useDeskSession();
   const [stats, setStats] = useState<Awaited<ReturnType<typeof adminStats>> | null>(null);
   const [queue, setQueue] = useState<Awaited<ReturnType<typeof listQueue>> | null>(null);
   const [members, setMembers] = useState<Awaited<ReturnType<typeof listMembers>>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
-  const [message, setMessage] = useState("");
+
+  const isAdmin = profile.role === "admin";
+  const isOfficer = profile.role === "officer";
 
   function load() {
-    void adminStats().then(setStats).catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Dashboard unavailable."));
+    void adminStats().then(setStats).catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Dashboard unavailable."));
     void recentActivity().then(setActivity).catch(() => undefined);
-    if (profile?.role === "admin") {
-      void listQueue().then(setQueue);
-      void listMembers().then(setMembers);
+    if (isAdmin) {
+      void listQueue().then(setQueue).catch(() => undefined);
+      void listMembers().then(setMembers).catch(() => undefined);
     }
   }
   useEffect(() => {
-    if (profile) load();
-  }, [profile]);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
-  if (profile && profile.role !== "admin" && profile.role !== "officer") {
+  if (!isAdmin && !isOfficer) {
     return (
-      <>
-        <TopBar profile={profile} />
-        <Page><p>Administration is for the admin and the SACCO officer.</p></Page>
-      </>
+      <Card>
+        <EmptyState
+          icon={Users}
+          title="Administration is staff-only"
+          body="The approval queue and member roles belong to the administrator and the SACCO officer."
+        />
+      </Card>
     );
   }
 
   return (
-    <>
-      <TopBar profile={profile ?? undefined} />
-      <Page>
-        <h1 className="font-display text-4xl text-moss-deep">Administration</h1>
-        <p className="mt-2 text-muted">Totals for the desk, then the queue for produce and loans.</p>
-        {message ? <p className="mt-3 text-sm text-clay">{message}</p> : null}
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Total listings" value={String(stats?.totalListings ?? "–")} />
-          <Stat label="Pending approvals" value={String(stats?.pendingApprovals ?? "–")} hint={`${stats?.pendingListings ?? 0} listings · ${stats?.pendingLoans ?? 0} loans`} />
-          <Stat label="Live on the market" value={String(stats?.liveListings ?? "–")} />
-          <Stat label="SACCO balances" value={ugx(stats?.totalSavings ?? 0)} hint={`Loans out ${ugx(stats?.activeLoans ?? 0)} · liquidity ${ugx(stats?.liquidity ?? 0)}`} />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Administration"
+        title="Approvals & members"
+        description="Totals for the desk, the queue for produce and loans, and the member register."
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total listings"
+          value={stats ? String(stats.totalListings) : "—"}
+          hint={stats ? `${stats.liveListings} live on the market` : undefined}
+          icon={Sprout}
+          tone="olive"
+        />
+        <StatCard
+          label="Pending approvals"
+          value={stats ? String(stats.pendingApprovals) : "—"}
+          hint={stats ? `${stats.pendingListings} listings · ${stats.pendingLoans} loans` : undefined}
+          icon={ClipboardCheck}
+          tone="amber"
+        />
+        <StatCard
+          label="SACCO balances"
+          value={stats ? ugxCompactSafe(stats.totalSavings) : "—"}
+          hint={stats ? `Loans out ${ugxCompactSafe(stats.activeLoans)}` : undefined}
+          icon={HandCoins}
+          tone="rust"
+        />
+        <StatCard
+          label="Members"
+          value={stats ? String(stats.members) : "—"}
+          hint={stats ? `${stats.orders} orders all-time` : undefined}
+          icon={Users}
+          tone="blue"
+        />
+      </div>
+
+      {isAdmin ? (
+        <Tabs defaultValue="queue">
+          <TabsList>
+            <TabsTrigger value="queue">
+              Queue
+              {queue && queue.listings.length + queue.loans.length > 0 ? (
+                <span className="ml-1 font-mono text-[10px] text-amber">{queue.listings.length + queue.loans.length}</span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="queue">
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle>Produce waiting</CardTitle>
+                    <p className="mt-1 text-[12.5px] text-muted">Approve to publish, or return it with a note.</p>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-1">
+                  {!queue ? (
+                    <div className="space-y-2">
+                      {[0, 1].map((i) => (
+                        <Skeleton key={i} className="h-24" />
+                      ))}
+                    </div>
+                  ) : queue.listings.length === 0 ? (
+                    <EmptyState icon={Sprout} title="No produce waiting" body="The queue is clear." />
+                  ) : (
+                    queue.listings.map((listing) => (
+                      <div key={listing.id} className="rounded-md border border-line bg-paper/50 p-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <p className="text-[13.5px] font-semibold text-ink">{listing.crop}</p>
+                          <span className="font-mono text-[11px] text-muted tabular-nums">
+                            {listing.quantity} {listing.unit} · {ugx(listing.unitPriceUgx)} each · {listing.district}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] text-muted">
+                          {listing.farmerName}
+                          {listing.harvestDate ? ` · harvested ${formatDate(listing.harvestDate, true)}` : ""}
+                          {listing.qualityGrade ? ` · ${listing.qualityGrade}` : ""}
+                        </p>
+                        {listing.description ? (
+                          <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink/80">{listing.description}</p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Input
+                            className="h-9 max-w-xs flex-1 text-[12.5px]"
+                            placeholder="Rejection note, if you return it"
+                            value={notes[`l${listing.id}`] ?? ""}
+                            onChange={(e) => setNotes({ ...notes, [`l${listing.id}`]: e.target.value })}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              void decideListing({ data: { id: listing.id, decision: "live" } })
+                                .then(() => {
+                                  toast.success(`${listing.crop} approved and live.`);
+                                  load();
+                                })
+                                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not approve."));
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void decideListing({ data: { id: listing.id, decision: "rejected", note: notes[`l${listing.id}`] } })
+                                .then(() => {
+                                  toast.success("Returned to the farmer with your note.");
+                                  load();
+                                })
+                                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not reject."));
+                            }}
+                          >
+                            Return
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle>Loans waiting</CardTitle>
+                    <p className="mt-1 text-[12.5px] text-muted">Approval moves the loan to the SACCO for disbursement.</p>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-1">
+                  {!queue ? (
+                    <div className="space-y-2">
+                      {[0].map((i) => (
+                        <Skeleton key={i} className="h-24" />
+                      ))}
+                    </div>
+                  ) : queue.loans.length === 0 ? (
+                    <EmptyState icon={HandCoins} title="No loans waiting" body="Every application has a decision." />
+                  ) : (
+                    queue.loans.map((loan) => (
+                      <div key={loan.id} className="rounded-md border border-line bg-paper/50 p-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <p className="font-mono text-[13.5px] font-medium text-ink tabular-nums">{ugx(loan.amountUgx)}</p>
+                          <span className="font-mono text-[11px] text-muted">
+                            {loan.memberName} · {loan.termMonths} months
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink/80">{loan.purpose}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Input
+                            className="h-9 max-w-xs flex-1 text-[12.5px]"
+                            placeholder="Rejection note, if you decline"
+                            value={notes[`n${loan.id}`] ?? ""}
+                            onChange={(e) => setNotes({ ...notes, [`n${loan.id}`]: e.target.value })}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              void decideLoan({ data: { id: loan.id, decision: "approved" } })
+                                .then(() => {
+                                  toast.success("Loan approved. The SACCO can disburse it.");
+                                  load();
+                                })
+                                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not approve."));
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void decideLoan({ data: { id: loan.id, decision: "rejected", note: notes[`n${loan.id}`] } })
+                                .then(() => {
+                                  toast.success("Loan declined with your note.");
+                                  load();
+                                })
+                                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not decline."));
+                            }}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="members">
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Member register</CardTitle>
+                  <p className="mt-1 text-[12.5px] text-muted">Change a member's role from the dropdown.</p>
+                </div>
+              </CardHeader>
+              <Table>
+                <thead>
+                  <tr>
+                    <TH>Member</TH>
+                    <TH>District</TH>
+                    <TH>Phone</TH>
+                    <TH className="text-right">Role</TH>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((member) => (
+                    <tr key={member.userId}>
+                      <TD className="text-[12.5px] font-semibold text-ink">{member.fullName}</TD>
+                      <TD className="text-[12px] text-muted">{member.district ?? "—"}</TD>
+                      <TD className="font-mono text-[11.5px] text-muted">{member.phone ?? "—"}</TD>
+                      <TD className="text-right">
+                        <Select
+                          className="h-8 w-32 text-[12px]"
+                          value={member.role}
+                          onChange={(event) => {
+                            void setMemberRole({ data: { userId: member.userId, role: event.target.value as Role } })
+                              .then(() => {
+                                toast.success("Role updated.");
+                                load();
+                              })
+                              .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not change role."));
+                          }}
+                        >
+                          <option value="farmer">farmer</option>
+                          <option value="buyer">buyer</option>
+                          <option value="officer">officer</option>
+                          <option value="admin">admin</option>
+                        </Select>
+                      </TD>
+                    </tr>
+                  ))}
+                  {members.length === 0 ? (
+                    <tr>
+                      <TD colSpan={4}>
+                        <p className="py-8 text-center text-[12.5px] text-muted">No members yet.</p>
+                      </TD>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </Table>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="activity">
+            <ActivityTable activity={activity} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <ActivityTable activity={activity} />
+      )}
+    </div>
+  );
+}
+
+function ActivityTable({ activity }: { activity: ActivityEntry[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Recent activity</CardTitle>
+          <p className="mt-1 text-[12.5px] text-muted">
+            Every approval, rejection, disbursement and role change, newest first.
+          </p>
         </div>
-
-        {profile?.role === "admin" ? (
-          <>
-            <h2 className="mt-10 font-display text-2xl">Produce waiting</h2>
-            <ul className="mt-3 space-y-3">
-              {(queue?.listings ?? []).map((listing) => (
-                <li key={listing.id}>
-                  <Card>
-                    <h3 className="font-display text-2xl">{listing.crop}</h3>
-                    <p className="text-sm">{listing.farmerName} · {listing.quantity} {listing.unit} · {ugx(listing.unitPriceUgx)} · {listing.district}</p>
-                    <p className="text-sm text-muted">{listing.description}</p>
-                    <input className="mt-3 w-full rounded-xl border border-line bg-paper px-3 py-2 text-sm" placeholder="Rejection note, if you reject" value={notes[`l${listing.id}`] ?? ""} onChange={(e) => setNotes({ ...notes, [`l${listing.id}`]: e.target.value })} />
-                    <div className="mt-3 flex gap-2">
-                      <button type="button" className="rounded-full bg-moss px-4 py-2 text-sm font-semibold text-surface" onClick={() => void decideListing({ data: { id: listing.id, decision: "live" } }).then(load)}>Approve</button>
-                      <button type="button" className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-surface" onClick={() => void decideListing({ data: { id: listing.id, decision: "rejected", note: notes[`l${listing.id}`] } }).then(load)}>Reject</button>
-                    </div>
-                  </Card>
-                </li>
-              ))}
-              {queue && queue.listings.length === 0 ? <p className="text-sm text-muted">No produce waiting.</p> : null}
-            </ul>
-            <h2 className="mt-10 font-display text-2xl">Loans waiting</h2>
-            <ul className="mt-3 space-y-3">
-              {(queue?.loans ?? []).map((loan) => (
-                <li key={loan.id}>
-                  <Card>
-                    <h3 className="font-display text-2xl">{ugx(loan.amountUgx)}</h3>
-                    <p className="text-sm">{loan.memberName} · {loan.termMonths} months</p>
-                    <p className="text-sm text-muted">{loan.purpose}</p>
-                    <input className="mt-3 w-full rounded-xl border border-line bg-paper px-3 py-2 text-sm" placeholder="Rejection note, if you reject" value={notes[`n${loan.id}`] ?? ""} onChange={(e) => setNotes({ ...notes, [`n${loan.id}`]: e.target.value })} />
-                    <div className="mt-3 flex gap-2">
-                      <button type="button" className="rounded-full bg-moss px-4 py-2 text-sm font-semibold text-surface" onClick={() => void decideLoan({ data: { id: loan.id, decision: "approved" } }).then(load)}>Approve</button>
-                      <button type="button" className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-surface" onClick={() => void decideLoan({ data: { id: loan.id, decision: "rejected", note: notes[`n${loan.id}`] } }).then(load)}>Reject</button>
-                    </div>
-                  </Card>
-                </li>
-              ))}
-              {queue && queue.loans.length === 0 ? <p className="text-sm text-muted">No loans waiting.</p> : null}
-            </ul>
-            <h2 className="mt-10 font-display text-2xl">Members</h2>
-            <ul className="mt-3 divide-y divide-line rounded-card border border-line bg-surface">
-              {members.map((member) => (
-                <li key={member.userId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <span>{member.fullName}<span className="text-muted"> · {member.district}</span></span>
-                  <select
-                    className="rounded-xl border border-line bg-paper px-3 py-2"
-                    value={member.role}
-                    onChange={(event) => {
-                      void setMemberRole({ data: { userId: member.userId, role: event.target.value as Role } })
-                        .then(load)
-                        .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not change role."));
-                    }}
-                  >
-                    <option value="farmer">farmer</option>
-                    <option value="buyer">buyer</option>
-                    <option value="officer">officer</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p className="mt-6 text-sm">The approval buttons are on the admin account. Sign in as jmuziransa@gmail.com.</p>
-        )}
-
-        <h2 className="mt-10 font-display text-2xl">Recent activity</h2>
-        <p className="mt-1 text-sm text-muted">Every approval, rejection, disbursement and role change, newest first.</p>
-        <ul className="mt-3 divide-y divide-line rounded-card border border-line bg-surface">
+      </CardHeader>
+      <Table>
+        <thead>
+          <tr>
+            <TH>Action</TH>
+            <TH>Detail</TH>
+            <TH className="text-right">When</TH>
+          </tr>
+        </thead>
+        <tbody>
           {activity.map((entry) => (
-            <li key={entry.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3 text-sm">
-              <span>
-                <span className="font-semibold">{ACTIVITY_LABELS[entry.action] ?? entry.action}</span>
-                <span className="text-muted"> · {entry.detail}</span>
-              </span>
-              <span className="text-muted">{entry.actorName} · {entry.createdAt.slice(0, 16).replace("T", " ")}</span>
-            </li>
+            <tr key={entry.id}>
+              <TD>
+                <Badge tone={entry.action.includes("rejected") ? "danger" : entry.action.includes("approved") ? "olive" : "blue"}>
+                  {ACTIVITY_LABELS[entry.action] ?? entry.action}
+                </Badge>
+              </TD>
+              <TD className="max-w-[320px]">
+                <p className="text-[12.5px] text-ink">{entry.detail}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-muted">by {entry.actorName}</p>
+              </TD>
+              <TD className="text-right font-mono text-[11px] text-muted">
+                {entry.createdAt.slice(0, 16).replace("T", " ")}
+              </TD>
+            </tr>
           ))}
-          {!activity.length ? <li className="px-4 py-6 text-center text-muted">No recorded activity yet.</li> : null}
-        </ul>
-      </Page>
-    </>
+          {activity.length === 0 ? (
+            <tr>
+              <TD colSpan={3}>
+                <p className="py-8 text-center text-[12.5px] text-muted">No recorded activity yet.</p>
+              </TD>
+            </tr>
+          ) : null}
+        </tbody>
+      </Table>
+    </Card>
   );
 }
 
@@ -153,12 +394,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "member.role_changed": "Changed a member's role",
 };
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card>
-      <p className="text-xs font-semibold uppercase text-muted">{label}</p>
-      <p className="mt-1 font-display text-3xl">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
-    </Card>
-  );
+function ugxCompactSafe(value: number): string {
+  return ugx(value);
 }

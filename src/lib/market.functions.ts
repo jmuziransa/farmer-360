@@ -38,6 +38,16 @@ export type Listing = {
   createdAt: string;
 };
 
+export type NotificationRow = {
+  id: number;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
 type ListingRow = {
   id: number;
   farmer_id: string;
@@ -127,6 +137,56 @@ async function logActivity(
   await sql`
     insert into activity_log (actor_id, actor_name, action, entity, entity_id, detail)
     values (${actorId}, ${actorName}, ${action}, ${entity}, ${entityId}, ${detail})
+  `;
+}
+
+function mapNotification(row: {
+  id: number;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  read_at: string | null;
+  created_at: string;
+}): NotificationRow {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    body: row.body,
+    href: row.href,
+    readAt: row.read_at ? String(row.read_at) : null,
+    createdAt: String(row.created_at),
+  };
+}
+
+/* ───────────────────────────── Notifications ───────────────────────────── */
+
+async function notify(
+  sql: SqlClient,
+  userId: string,
+  kind: string,
+  title: string,
+  body: string | null,
+  href: string | null,
+): Promise<void> {
+  await sql`
+    insert into notifications (user_id, kind, title, body, href)
+    values (${userId}, ${kind}, ${title}, ${body}, ${href})
+  `;
+}
+
+async function notifyAdmins(
+  sql: SqlClient,
+  kind: string,
+  title: string,
+  body: string | null,
+  href: string | null,
+): Promise<void> {
+  await sql`
+    insert into notifications (user_id, kind, title, body, href)
+    select user_id, ${kind}, ${title}, ${body}, ${href}
+    from profiles where role in ('admin', 'officer')
   `;
 }
 
@@ -266,6 +326,37 @@ export const seedDesk = createServerFn({ method: "POST" }).handler(async () => {
         insert into inventory_movements (item_id, farm_id, owner_id, quantity, reason, record_date)
         values (${urea.id}, ${farmId}, ${farmerId}, ${50}, ${"Two 25kg bags before top-dressing"}, ${"2026-11-18"})
       `;
+    }
+    const notifCount = await sql<{ n: number }>`select count(*)::int as n from notifications`;
+    if ((notifCount[0]?.n ?? 0) === 0) {
+      const buyerId = ids["buyer.demo@akatale.ug"];
+      const officerId = ids["officer.demo@akatale.ug"];
+      const adminId = ids["jmuziransa@gmail.com"];
+      const rows: { user: string | undefined; kind: string; title: string; body: string; href: string; read: boolean }[] = [
+        { user: farmerId, kind: "listing", title: "Dry Maize is on the market", body: "The administrator approved your 500 kg listing.", href: "/desk/sell", read: false },
+        { user: farmerId, kind: "order", title: "New order from Peter Okello", body: "150 kg of Dry Maize requested for Friday delivery.", href: "/desk/orders", read: false },
+        { user: farmerId, kind: "savings", title: "Savings deposit recorded", body: "UGX 450,000 was added to your SACCO book.", href: "/desk/sacco", read: true },
+        { user: farmerId, kind: "loan", title: "Loan application received", body: "UGX 800,000 for drying racks is awaiting review.", href: "/desk/loans", read: false },
+        { user: farmerId, kind: "listing", title: "Robusta Coffee awaiting review", body: "Your 120 kg listing is in the approval queue.", href: "/desk/sell", read: false },
+        { user: buyerId, kind: "loan", title: "Loan approved", body: "UGX 250,000 trading float is ready for disbursement.", href: "/desk/loans", read: false },
+        { user: adminId, kind: "approval", title: "Coffee listing awaiting approval", body: "Amina Nakato submitted 120 kg of Robusta Coffee.", href: "/desk/admin", read: false },
+        { user: adminId, kind: "loan", title: "Loan request from Amina Nakato", body: "UGX 800,000 for drying racks and tarpaulins.", href: "/desk/admin", read: false },
+        { user: officerId, kind: "savings", title: "Deposit recorded", body: "UGX 200,000 received from Peter Okello.", href: "/desk/sacco", read: true },
+      ];
+      for (const row of rows) {
+        if (!row.user) continue;
+        if (row.read) {
+          await sql`
+            insert into notifications (user_id, kind, title, body, href, read_at, created_at)
+            values (${row.user}, ${row.kind}, ${row.title}, ${row.body}, ${row.href}, now() - interval '2 days', now() - interval '3 days')
+          `;
+        } else {
+          await sql`
+            insert into notifications (user_id, kind, title, body, href, created_at)
+            values (${row.user}, ${row.kind}, ${row.title}, ${row.body}, ${row.href}, now() - interval '2 days')
+          `;
+        }
+      }
     }
   }
   return { ok: true as const, seeded: true };
@@ -425,6 +516,13 @@ export const createListing = createServerFn({ method: "POST" })
         ${data.harvestDate}, ${data.qualityGrade}, ${data.photoData}, ${"pending"}
       )
     `;
+    await notifyAdmins(
+      sql,
+      "approval",
+      `${data.crop} awaiting approval`,
+      `${profile.fullName} submitted ${data.quantity} ${data.unit} from ${data.district}.`,
+      "/desk/admin",
+    );
     return { ok: true as const };
   });
 
@@ -485,11 +583,23 @@ export const decideListing = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireProfile(context.userId, ["admin"]);
     const sql = await getSql();
-    const target = await sql<{ crop: string }>`select crop from listings where id = ${data.id}`;
+    const target = await sql<{ crop: string; farmer_id: string }>`select crop, farmer_id from listings where id = ${data.id}`;
     await sql`
       update listings set status = ${data.decision}, rejection_note = ${data.note}
       where id = ${data.id} and status = 'pending'
     `;
+    if (target[0]) {
+      await notify(
+        sql,
+        target[0].farmer_id,
+        "listing",
+        data.decision === "live" ? `${target[0].crop} is on the market` : `${target[0].crop} returned for changes`,
+        data.decision === "live"
+          ? "The administrator approved your listing. Buyers can now order it."
+          : (data.note ?? "Check the listing details and submit again."),
+        "/desk/sell",
+      );
+    }
     await logActivity(sql, context.userId, actor.fullName,
       data.decision === "live" ? "listing.approved" : "listing.rejected",
       "listing", String(data.id),
@@ -507,8 +617,8 @@ export const decideLoan = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireProfile(context.userId, ["admin"]);
     const sql = await getSql();
-    const target = await sql<{ amount_ugx: number; member_name: string | null }>`
-      select l.amount_ugx, p.full_name as member_name
+    const target = await sql<{ amount_ugx: number; member_name: string | null; member_id: string }>`
+      select l.amount_ugx, l.member_id, p.full_name as member_name
       from loans l left join profiles p on p.user_id = l.member_id
       where l.id = ${data.id}
     `;
@@ -516,6 +626,18 @@ export const decideLoan = createServerFn({ method: "POST" })
       update loans set status = ${data.decision}, rejection_note = ${data.note}
       where id = ${data.id} and status = 'pending'
     `;
+    if (target[0]) {
+      await notify(
+        sql,
+        target[0].member_id,
+        "loan",
+        data.decision === "approved" ? "Loan approved" : "Loan request declined",
+        data.decision === "approved"
+          ? `UGX ${target[0].amount_ugx.toLocaleString("en-UG")} is ready for disbursement by the SACCO.`
+          : (data.note ?? "Speak to the SACCO officer about your application."),
+        "/desk/loans",
+      );
+    }
     await logActivity(sql, context.userId, actor.fullName,
       data.decision === "approved" ? "loan.approved" : "loan.rejected",
       "loan", String(data.id),
@@ -535,6 +657,8 @@ export const adminStats = createServerFn({ method: "GET" })
       pending_loans: number;
       savings: number;
       outstanding: number;
+      members: number;
+      orders: number;
     }>`
       select
         (select count(*)::int from listings) as total_listings,
@@ -552,7 +676,9 @@ export const adminStats = createServerFn({ method: "GET" })
             select loan_id, sum(amount_ugx)::int as paid from loan_repayments group by loan_id
           ) r on r.loan_id = l.id
           where l.status in ('approved', 'active')
-        ) as outstanding
+        ) as outstanding,
+        (select count(*)::int from profiles) as members,
+        (select count(*)::int from orders) as orders
     `;
     const row = counts[0];
     const savings = row?.savings ?? 0;
@@ -566,6 +692,8 @@ export const adminStats = createServerFn({ method: "GET" })
       totalSavings: savings,
       activeLoans: outstanding,
       liquidity: savings - outstanding,
+      members: row?.members ?? 0,
+      orders: row?.orders ?? 0,
     };
   });
 
@@ -621,12 +749,19 @@ export const applyLoan = createServerFn({ method: "POST" })
     return { amountUgx: Math.round(input.amountUgx), purpose: input.purpose.trim(), termMonths: input.termMonths };
   })
   .handler(async ({ context, data }) => {
-    await requireProfile(context.userId, ["farmer", "buyer", "officer"]);
+    const profile = await requireProfile(context.userId, ["farmer", "buyer", "officer"]);
     const sql = await getSql();
     await sql`
       insert into loans (member_id, amount_ugx, purpose, term_months, status)
       values (${context.userId}, ${data.amountUgx}, ${data.purpose}, ${data.termMonths}, ${"pending"})
     `;
+    await notifyAdmins(
+      sql,
+      "loan",
+      `Loan request from ${profile.fullName}`,
+      `UGX ${data.amountUgx.toLocaleString("en-UG")} — ${data.purpose}`,
+      "/desk/admin",
+    );
     return { ok: true as const };
   });
 
@@ -689,6 +824,14 @@ export const recordSavings = createServerFn({ method: "POST" })
       insert into savings_ledger (member_id, kind, amount_ugx, note, officer_id)
       values (${data.memberId}, ${data.kind}, ${data.amountUgx}, ${data.note}, ${context.userId})
     `;
+    await notify(
+      sql,
+      data.memberId,
+      "savings",
+      data.kind === "deposit" ? "Savings deposit recorded" : "Savings withdrawal recorded",
+      `UGX ${data.amountUgx.toLocaleString("en-UG")} was recorded on your SACCO book.`,
+      "/desk/sacco",
+    );
     return { ok: true as const };
   });
 
@@ -697,15 +840,35 @@ export const listMembers = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await requireProfile(context.userId, ["officer", "admin"]);
     const sql = await getSql();
-    const rows = await sql<{ user_id: string; full_name: string; role: Role; district: string | null }>`
-      select user_id, full_name, role, district from profiles order by full_name
+    const rows = await sql<{ user_id: string; full_name: string; role: Role; district: string | null; phone: string | null }>`
+      select user_id, full_name, role, district, phone from profiles order by full_name
     `;
     return rows.map((row) => ({
       userId: row.user_id,
       fullName: row.full_name,
       role: row.role,
       district: row.district,
+      phone: row.phone,
     }));
+  });
+
+export const withdrawListing = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id: number }) => {
+    if (!input.id) throw new Error("Missing listing.");
+    return { id: input.id };
+  })
+  .handler(async ({ context, data }) => {
+    const profile = await requireProfile(context.userId, ["farmer", "admin"]);
+    const sql = await getSql();
+    if (profile.role !== "admin") {
+      const owned = await sql<{ n: number }>`
+        select count(*)::int as n from listings where id = ${data.id} and farmer_id = ${context.userId}
+      `;
+      if (!owned[0]?.n) throw new Error("That listing is not yours.");
+    }
+    await sql`update listings set status = 'sold' where id = ${data.id} and status = 'live'`;
+    return { ok: true as const };
   });
 
 export const setMemberRole = createServerFn({ method: "POST" })
@@ -814,6 +977,16 @@ export const repayLoan = createServerFn({ method: "POST" })
       insert into loan_repayments (loan_id, amount_ugx, note, recorded_by)
       values (${data.id}, ${data.amountUgx}, ${data.note}, ${context.userId})
     `;
+    if (loan.member_id !== context.userId) {
+      await notify(
+        sql,
+        loan.member_id,
+        "loan",
+        "Loan repayment received",
+        `UGX ${data.amountUgx.toLocaleString("en-UG")} was recorded against your loan.`,
+        "/desk/loans",
+      );
+    }
     if (loan.paid + data.amountUgx >= loan.amount_ugx) {
       await sql`update loans set status = 'closed' where id = ${data.id}`;
     } else if (loan.status === "approved") {
@@ -830,9 +1003,11 @@ export type OrderRow = {
   buyerName: string;
   quantity: number;
   unit: string;
+  unitPriceUgx: number;
   note: string | null;
   status: string;
   createdAt: string;
+  incoming: boolean;
 };
 
 export const placeOrder = createServerFn({ method: "POST" })
@@ -842,10 +1017,10 @@ export const placeOrder = createServerFn({ method: "POST" })
     return { listingId: input.listingId, quantity: input.quantity, note: input.note?.trim() || null };
   })
   .handler(async ({ context, data }) => {
-    await requireProfile(context.userId, ["buyer", "admin"]);
+    const buyer = await requireProfile(context.userId, ["buyer", "admin"]);
     const sql = await getSql();
-    const listings = await sql<{ quantity: number; status: string; farmer_id: string }>`
-      select quantity::float8 as quantity, status, farmer_id from listings where id = ${data.listingId}
+    const listings = await sql<{ quantity: number; status: string; farmer_id: string; crop: string; unit: string }>`
+      select quantity::float8 as quantity, status, farmer_id, crop, unit from listings where id = ${data.listingId}
     `;
     const listing = listings[0];
     if (!listing || listing.status !== "live") throw new Error("That listing is not on the market.");
@@ -855,50 +1030,67 @@ export const placeOrder = createServerFn({ method: "POST" })
       insert into orders (listing_id, buyer_id, quantity, note, status)
       values (${data.listingId}, ${context.userId}, ${data.quantity}, ${data.note}, ${"requested"})
     `;
+    if (listing.farmer_id !== context.userId) {
+      await notify(
+        sql,
+        listing.farmer_id,
+        "order",
+        `New order from ${buyer.fullName}`,
+        `${data.quantity} ${listing.unit} of ${listing.crop} requested.`,
+        "/desk/orders",
+      );
+    }
     return { ok: true as const };
   });
+
+async function fetchOrders(sql: SqlClient, userId: string, role: Role, limit = 40): Promise<OrderRow[]> {
+  const rows = await sql<{
+    id: number;
+    listing_id: number;
+    crop: string;
+    buyer_id: string;
+    buyer_name: string | null;
+    quantity: number;
+    unit: string;
+    unit_price_ugx: number;
+    note: string | null;
+    status: string;
+    created_at: string;
+    farmer_id: string;
+  }>`
+    select o.id, o.listing_id, l.crop, o.buyer_id, b.full_name as buyer_name, o.quantity::float8 as quantity,
+           l.unit, l.unit_price_ugx, o.note, o.status, o.created_at::text as created_at, l.farmer_id
+    from orders o
+    join listings l on l.id = o.listing_id
+    left join profiles b on b.user_id = o.buyer_id
+    where o.buyer_id = ${userId}
+       or l.farmer_id = ${userId}
+       or ${role} in ('admin', 'officer')
+    order by o.created_at desc
+    limit ${limit}
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    listingId: row.listing_id,
+    crop: row.crop,
+    buyerId: row.buyer_id,
+    buyerName: row.buyer_name ?? "Buyer",
+    quantity: row.quantity,
+    unit: row.unit,
+    unitPriceUgx: row.unit_price_ugx,
+    note: row.note,
+    status: row.status,
+    createdAt: row.created_at,
+    incoming: row.farmer_id === userId,
+  }));
+}
 
 export const myOrders = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const profile = await requireProfile(context.userId);
     const sql = await getSql();
-    const rows = await sql<{
-      id: number;
-      listing_id: number;
-      crop: string;
-      buyer_id: string;
-      buyer_name: string | null;
-      quantity: number;
-      unit: string;
-      note: string | null;
-      status: string;
-      created_at: string;
-      farmer_id: string;
-    }>`
-      select o.id, o.listing_id, l.crop, o.buyer_id, b.full_name as buyer_name, o.quantity::float8 as quantity,
-             l.unit, o.note, o.status, o.created_at::text as created_at, l.farmer_id
-      from orders o
-      join listings l on l.id = o.listing_id
-      left join profiles b on b.user_id = o.buyer_id
-      where o.buyer_id = ${context.userId}
-         or l.farmer_id = ${context.userId}
-         or ${profile.role} = 'admin'
-      order by o.created_at desc
-    `;
-    return rows.map((row) => ({
-      id: row.id,
-      listingId: row.listing_id,
-      crop: row.crop,
-      buyerId: row.buyer_id,
-      buyerName: row.buyer_name ?? "Buyer",
-      quantity: row.quantity,
-      unit: row.unit,
-      note: row.note,
-      status: row.status,
-      createdAt: row.created_at,
-      incoming: row.farmer_id === context.userId,
-    }));
+    return fetchOrders(sql, context.userId, profile.role);
   });
 
 export const decideOrder = createServerFn({ method: "POST" })
@@ -916,6 +1108,27 @@ export const decideOrder = createServerFn({ method: "POST" })
       if (!owned[0]?.n) throw new Error("That order is not yours.");
     }
     await sql`update orders set status = ${data.status} where id = ${data.id}`;
+    const parties = await sql<{ buyer_id: string; crop: string }>`
+      select o.buyer_id, l.crop
+      from orders o join listings l on l.id = o.listing_id
+      where o.id = ${data.id}
+    `;
+    const party = parties[0];
+    if (party && party.buyer_id !== context.userId) {
+      const label = data.status === "accepted" ? "accepted" : data.status === "fulfilled" ? "fulfilled" : "declined";
+      await notify(
+        sql,
+        party.buyer_id,
+        "order",
+        `${party.crop} order ${label}`,
+        data.status === "accepted"
+          ? "The farmer accepted your request and will arrange delivery."
+          : data.status === "fulfilled"
+            ? "The farmer marked this order delivered."
+            : "The farmer declined this request. Try another listing.",
+        "/desk/orders",
+      );
+    }
     if (data.status === "fulfilled") {
       // Sell from the store: fulfilling an order deducts the produce from the
       // farmer's stock ledger when a matching item holds enough. A shortfall
@@ -946,6 +1159,235 @@ export const decideOrder = createServerFn({ method: "POST" })
           `;
         }
       }
+    }
+    return { ok: true as const };
+  });
+
+/* ───────────────────────────── Public stats ───────────────────────────── */
+
+export const getPublicStats = createServerFn({ method: "GET" }).handler(async () => {
+  const sql = await getSql();
+  const rows = await sql<{
+    farmers: number;
+    buyers: number;
+    live_listings: number;
+    districts: number;
+    savings: number;
+    fulfilled: number;
+    members: number;
+    crops: number;
+  }>`
+    select
+      (select count(*)::int from profiles where role = 'farmer') as farmers,
+      (select count(*)::int from profiles where role = 'buyer') as buyers,
+      (select count(*)::int from listings where status = 'live') as live_listings,
+      (select count(distinct district)::int from listings) as districts,
+      (select coalesce(sum(case when kind = 'deposit' then amount_ugx else -amount_ugx end), 0)::int from savings_ledger) as savings,
+      (select count(*)::int from orders where status = 'fulfilled') as fulfilled,
+      (select count(*)::int from profiles) as members,
+      (select count(distinct crop)::int from listings) as crops
+  `;
+  const row = rows[0];
+  return {
+    farmers: row?.farmers ?? 0,
+    buyers: row?.buyers ?? 0,
+    liveListings: row?.live_listings ?? 0,
+    districts: row?.districts ?? 0,
+    savings: row?.savings ?? 0,
+    fulfilled: row?.fulfilled ?? 0,
+    members: row?.members ?? 0,
+    crops: row?.crops ?? 0,
+  };
+});
+
+/* ───────────────────────────── Desk overview ───────────────────────────── */
+
+export type DeskOverview = {
+  role: Role;
+  stats: {
+    liveListings: number;
+    myListings: number;
+    pendingOrders: number;
+    sales: number;
+    savings: number;
+    loanOutstanding: number;
+    pendingApprovals: number;
+    members: number;
+    myOrders: number;
+  };
+  monthly: { label: string; deposits: number; withdrawals: number }[];
+  recentListings: Listing[];
+  recentOrders: OrderRow[];
+  activity: NotificationRow[];
+  unread: number;
+};
+
+export const getDeskOverview = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<DeskOverview> => {
+    const profile = await requireProfile(context.userId);
+    const sql = await getSql();
+    const isStaff = profile.role === "admin" || profile.role === "officer";
+
+    const counts = await sql<{
+      live_listings: number;
+      my_listings: number;
+      pending_orders: number;
+      sales: number;
+      savings: number;
+      loan_outstanding: number;
+      pending_listings: number;
+      pending_loans: number;
+      members: number;
+      my_orders: number;
+    }>`
+      select
+        (select count(*)::int from listings where status = 'live') as live_listings,
+        (select count(*)::int from listings where farmer_id = ${context.userId}) as my_listings,
+        (
+          select count(*)::int from orders o
+          join listings l on l.id = o.listing_id
+          where o.status = 'requested' and (o.buyer_id = ${context.userId} or l.farmer_id = ${context.userId})
+        ) as pending_orders,
+        (
+          select coalesce(sum(o.quantity * l.unit_price_ugx), 0)::int from orders o
+          join listings l on l.id = o.listing_id
+          where o.status = 'fulfilled'
+            and (l.farmer_id = ${context.userId} or o.buyer_id = ${context.userId} or ${isStaff})
+        ) as sales,
+        (
+          select coalesce(sum(case when kind = 'deposit' then amount_ugx else -amount_ugx end), 0)::int
+          from savings_ledger where member_id = ${context.userId}
+        ) as savings,
+        (
+          select coalesce(sum(greatest(l.amount_ugx - coalesce(r.paid, 0), 0)), 0)::int
+          from loans l
+          left join (select loan_id, sum(amount_ugx)::int as paid from loan_repayments group by loan_id) r
+            on r.loan_id = l.id
+          where l.member_id = ${context.userId} and l.status in ('approved', 'active')
+        ) as loan_outstanding,
+        (select count(*)::int from listings where status = 'pending') as pending_listings,
+        (select count(*)::int from loans where status = 'pending') as pending_loans,
+        (select count(*)::int from profiles) as members,
+        (select count(*)::int from orders where buyer_id = ${context.userId}) as my_orders
+    `;
+    const row = counts[0];
+
+    const monthRows = await sql<{ ym: string; deposits: number; withdrawals: number }>`
+      select to_char(date_trunc('month', created_at), 'YYYY-MM') as ym,
+             coalesce(sum(case when kind = 'deposit' then amount_ugx else 0 end), 0)::int as deposits,
+             coalesce(sum(case when kind = 'withdrawal' then amount_ugx else 0 end), 0)::int as withdrawals
+      from savings_ledger
+      where created_at >= date_trunc('month', now()) - interval '5 months'
+        and (member_id = ${context.userId} or ${isStaff})
+      group by 1
+    `;
+    const monthMap = new Map(monthRows.map((r) => [r.ym, r]));
+    const monthly: DeskOverview["monthly"] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const found = monthMap.get(ym);
+      monthly.push({
+        label: d.toLocaleString("en-GB", { month: "short" }),
+        deposits: found?.deposits ?? 0,
+        withdrawals: found?.withdrawals ?? 0,
+      });
+    }
+
+    const recentListingRows = await sql<ListingRow>`
+      select l.id, l.farmer_id, p.full_name as farmer_name, l.crop, l.quantity::float8 as quantity,
+             l.unit, l.unit_price_ugx, l.district, l.subcounty, l.description, l.farm_name, l.phone,
+             l.harvest_date, l.quality_grade, l.photo_data, l.status, l.rejection_note,
+             l.created_at::text as created_at
+      from listings l
+      left join profiles p on p.user_id = l.farmer_id
+      where l.farmer_id = ${context.userId} or l.status = 'live'
+         or ${profile.role === "admin"}
+      order by l.created_at desc
+      limit 5
+    `;
+
+    const recentOrders = await fetchOrders(sql, context.userId, profile.role, 5);
+
+    const activityRows = await sql<{
+      id: number;
+      kind: string;
+      title: string;
+      body: string | null;
+      href: string | null;
+      read_at: string | null;
+      created_at: string;
+    }>`
+      select id, kind, title, body, href, read_at::text as read_at, created_at::text as created_at
+      from notifications
+      where user_id = ${context.userId}
+      order by created_at desc
+      limit 6
+    `;
+    const unreadRows = await sql<{ n: number }>`
+      select count(*)::int as n from notifications where user_id = ${context.userId} and read_at is null
+    `;
+
+    return {
+      role: profile.role,
+      stats: {
+        liveListings: row?.live_listings ?? 0,
+        myListings: row?.my_listings ?? 0,
+        pendingOrders: row?.pending_orders ?? 0,
+        sales: row?.sales ?? 0,
+        savings: row?.savings ?? 0,
+        loanOutstanding: row?.loan_outstanding ?? 0,
+        pendingApprovals: isStaff ? (row?.pending_listings ?? 0) + (row?.pending_loans ?? 0) : 0,
+        members: row?.members ?? 0,
+        myOrders: row?.my_orders ?? 0,
+      },
+      monthly,
+      recentListings: recentListingRows.map(mapListing),
+      recentOrders,
+      activity: activityRows.map(mapNotification),
+      unread: unreadRows[0]?.n ?? 0,
+    };
+  });
+
+/* ───────────────────────────── Notifications ───────────────────────────── */
+
+export const listNotifications = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: number;
+      kind: string;
+      title: string;
+      body: string | null;
+      href: string | null;
+      read_at: string | null;
+      created_at: string;
+    }>`
+      select id, kind, title, body, href, read_at::text as read_at, created_at::text as created_at
+      from notifications
+      where user_id = ${context.userId}
+      order by created_at desc
+      limit 20
+    `;
+    const unread = rows.filter((r) => !r.read_at).length;
+    return { items: rows.map(mapNotification), unread };
+  });
+
+export const markNotificationsRead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id?: number; all?: boolean }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    if (data.all || !data.id) {
+      await sql`update notifications set read_at = now() where user_id = ${context.userId} and read_at is null`;
+    } else {
+      await sql`
+        update notifications set read_at = now()
+        where id = ${data.id} and user_id = ${context.userId}
+      `;
     }
     return { ok: true as const };
   });

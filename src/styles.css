@@ -1,42 +1,284 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/*
+ * Farmer 360 design tokens.
+ *
+ * The visual language follows the Coursera DESIGN.md system: a white canvas
+ * edge-to-edge, a single voltage blue (#0056d2) carrying every primary CTA
+ * and link, a deep navy (#002761) owning the sidebar and callout panels, and
+ * a gentle four-step neutral ladder (#0f1114 ink, #5b6780 muted body,
+ * #dae1ed hairline, #e8eef7 surface tint). Typography is Source Sans Pro
+ * alone at weights 400 / 600 / 700 (display, body, action) with a mono face
+ * reserved for figures and data labels. Action buttons stay rectangular at
+ * 8px (--cds-border-radius-100), cards sit at 16px, and chips are full
+ * 50px capsules — the role-split between commit-actions and filters.
+ * Success / warning / error feedback: #276a1a / #a32e00 / #d30a28.
+ * Display headlines borrow Doordash's TT-Norms scale (32-40px, weight 700)
+ * but keep Source Sans Pro letter-spacing discipline.
+ */
 @theme {
-  --color-ink: #1c1914;
-  --color-paper: #f4efe4;
-  --color-surface: #fffdf8;
-  --color-line: #e3d9c6;
-  --color-moss: #1d6b43;
-  --color-moss-deep: #123d28;
-  --color-clay: #b4532a;
-  --color-muted: #6d665c;
-  --color-warn: #8a5a12;
-  --font-sans: "Source Sans 3", "Segoe UI", sans-serif;
-  --font-display: "Fraunces", Georgia, serif;
-  --radius-card: 1rem;
+  /* Neutral spine (Coursera five-step ladder) */
+  --color-canvas: #ffffff;
+  --color-paper: #f0f6ff;
+  --color-surface: #ffffff;
+  --color-surface-strong: #ffffff;
+  --color-ink: #0f1114;
+  --color-ink-soft: #1e2229;
+  --color-muted: #5b6780;
+  --color-muted-soft: #8495b0;
+  --color-line: #dae1ed;
+  --color-line-strong: #c3cee0;
+
+  /* Voltage blue — every primary CTA, link, active state (Coursera) */
+  --color-primary: #0056d2;
+  --color-primary-pressed: #0048b0;
+  --color-primary-soft: #e3eeff;
+  --color-primary-xsoft: #f0f6ff;
+
+  /* Navy callout family — sidebar, hero card, stat panels (Coursera) */
+  --color-navy: #002761;
+  --color-navy-mid: #003b8f;
+
+  /* Semantic tones (rebadged to the component vocabulary) */
+  --color-olive: #276a1a;          /* success */
+  --color-olive-soft: #e6f2e2;
+  --color-amber: #a32e00;          /* warning */
+  --color-amber-soft: #fff4e8;
+  --color-blue: #003b8f;           /* info (navy-mid) */
+  --color-blue-soft: #e3eeff;
+  --color-indigo: #4338ca;
+  --color-indigo-soft: #ecedf8;
+  --color-danger: #d30a28;         /* error */
+  --color-danger-soft: #fde8ec;
+
+  /* Legacy aliases kept so ported components read naturally */
+  --color-rust: #0056d2;           /* accent = voltage blue */
+  --color-rust-deep: #0048b0;
+  --color-rust-soft: #e3eeff;
+
+  /* Dark chrome (sidebar + footer) — navy, not near-black */
+  --color-sidebar: #002761;
+  --color-sidebar-foreground: #ffffff;
+  --color-sidebar-active: #003b8f;
+  --color-sidebar-muted: #9db4d8;
+
+  --font-sans: "Source Sans Pro", "Source Sans 3", Arial, "Segoe UI", sans-serif;
+  --font-display: "Source Sans Pro", "Source Sans 3", Arial, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Coursera radius scale: 8px actions, 16px cards, 24px feature blocks */
+  --radius-card: 1rem;             /* 16px */
+  --radius-sm: 0.375rem;           /* 6px */
+  --radius-md: 0.5rem;             /* 8px — button radius */
+  --radius-lg: 1rem;               /* 16px — card radius */
+  --radius-xl: 1.5rem;             /* 24px — feature blocks */
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 380ms;
 }
 
 @layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
   html {
-    background: var(--color-paper);
+    background: var(--color-canvas);
     color: var(--color-ink);
     overflow-x: clip;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
+
   body {
-    font-family: var(--font-sans);
-    line-height: 1.5;
     min-height: 100vh;
     overflow-x: clip;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
-  h1, h2, h3, .font-display {
+
+  /* Source Sans Pro display: 600 weight, tight tracking (Coursera dialect) */
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    text-wrap: balance;
   }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-canvas);
+  }
+
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role="button"]:not(:disabled),
+  a {
     cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
-@utility drawer-ease {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+@utility container-page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 78rem;
+  padding-inline: 1.25rem;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@utility figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+@utility hairline {
+  border-color: color-mix(in oklab, var(--color-line-strong) 70%, transparent);
+}
+
+@utility surface-hover {
+  transition:
+    transform var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+.surface-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-line-strong);
+  box-shadow: 0 10px 30px -22px rgba(15, 17, 20, 0.35);
+}
+
+/* Dashboard scroll area: the sidebar stays fixed, content scrolls. */
+.desk-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+.desk-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.desk-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--color-line-strong);
+}
+
+/* Accordion (Radix data-state driven, tw-animate-css keyframes) */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes draw-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-fade-rise {
+  animation: fade-rise 620ms var(--ease-out) both;
+}
+
+.animate-draw-line {
+  transform-origin: left;
+  animation: draw-line 900ms var(--ease-out) both;
+}
+
+/* Sidebar nav links live on navy; keep the active pill visible. */
+.sidebar-link {
+  color: rgb(255 255 255 / 0.75);
+  transition: background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.sidebar-link:hover {
+  background-color: rgb(255 255 255 / 0.06);
+  color: #ffffff;
+}
+
+.sidebar-link[data-status="active"] {
+  background-color: rgb(255 255 255 / 0.1);
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
 }

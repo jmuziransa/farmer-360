@@ -1,58 +1,99 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Card, Field, inputClass, Page, Primary, TopBar } from "@/components/chrome";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { AuthError, AuthShell } from "@/components/auth-shell";
+import { Button, Card, Field, Input, Select } from "@/components/ui";
 import { authClient } from "@/lib/auth/client";
+import { DEMO_ACCOUNTS, type DemoAccount } from "@/lib/demo";
+import { seedDesk } from "@/lib/market.functions";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("jmuziransa@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [seeding, setSeeding] = useState(true);
+
+  // The demo desk seeds itself the first time anyone opens the login page —
+  // the quick-fill accounts only work once their rows exist.
+  useEffect(() => {
+    let alive = true;
+    void seedDesk()
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setSeeding(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function pick(account: DemoAccount) {
+    setEmail(account.email);
+    setPassword(account.password);
+    setError("");
+  }
 
   return (
-    <>
-      <TopBar />
-      <Page>
-        <Card className="mx-auto max-w-md">
-          <h1 className="font-display text-3xl">Log in</h1>
-          <p className="mt-1 text-sm text-muted">Use a ready account from the About page, or one you created.</p>
-          <form
-            className="mt-5 space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setBusy(true);
-              setError("");
-              void authClient.signIn
-                .email({ email, password, callbackURL: "/desk" })
-                .then((result) => {
-                  if (result.error) {
-                    setError(result.error.message ?? "Could not sign in.");
-                    setBusy(false);
-                    return;
-                  }
-                  void navigate({ to: "/desk" });
-                })
-                .catch(() => {
-                  setError("Could not sign in.");
+    <AuthShell onPick={pick} activeEmail={email} seeding={seeding}>
+      <Card className="border-none p-0 shadow-none">
+        <h1 className="font-display text-[28px] leading-tight text-ink">Welcome back</h1>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
+          Sign in to your desk, or pick a demo account from the panel.
+        </p>
+        <form
+          className="mt-6 space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setBusy(true);
+            setError("");
+            void authClient.signIn
+              .email({ email, password, callbackURL: "/desk" })
+              .then((result) => {
+                if (result.error) {
+                  setError(result.error.message ?? "Could not sign in.");
                   setBusy(false);
-                });
-            }}
-          >
-            <Field label="Email">
-              <input className={inputClass} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </Field>
-            <Field label="Password">
-              <input className={inputClass} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </Field>
-            {error ? <p className="text-sm text-clay">{error}</p> : null}
-            <Primary type="submit" disabled={busy}>{busy ? "Signing in…" : "Log in"}</Primary>
-          </form>
-          <p className="mt-4 text-sm">No account? <Link to="/signup" className="font-semibold text-moss-deep">Sign up</Link></p>
-        </Card>
-      </Page>
-    </>
+                  return;
+                }
+                toast.success("Signed in. Opening your desk…");
+                void navigate({ to: "/desk" });
+              })
+              .catch(() => {
+                setError("Could not sign in.");
+                setBusy(false);
+              });
+          }}
+        >
+          <Field label="Email" htmlFor="login-email">
+            <Input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          </Field>
+          <Field label="Password" htmlFor="login-password">
+            <Input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+          </Field>
+          <AuthError message={error} />
+          <Button type="submit" className="w-full" size="lg" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+        <p className="mt-5 text-center text-[13px] text-muted">
+          New to Farmer 360?{" "}
+          <a href="/signup" className="font-semibold text-primary hover:underline">
+            Create an account
+          </a>
+        </p>
+        {seeding ? (
+          <p className="mt-3 text-center font-mono text-[9.5px] tracking-[0.12em] text-muted-soft uppercase">
+            Preparing the demo desk…
+          </p>
+        ) : (
+          <p className="mt-3 text-center font-mono text-[9.5px] tracking-[0.12em] text-muted-soft uppercase">
+            {DEMO_ACCOUNTS.length} demo accounts ready
+          </p>
+        )}
+      </Card>
+    </AuthShell>
   );
 }
