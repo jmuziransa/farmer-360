@@ -10,170 +10,208 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as MarketplaceRouteImport } from './routes/marketplace'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
-import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
-import { Route as AuthenticatedAdviceRouteImport } from './routes/_authenticated/advice'
-import { Route as AuthenticatedSaccoRouteImport } from './routes/_authenticated/sacco'
-import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
-import { Route as ModulesModuleRouteImport } from './routes/modules.$module'
+import { Route as DeskRouteImport } from './routes/desk'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as MarketRouteImport } from './routes/market'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as DeskIndexRouteImport } from './routes/desk.index'
+import { Route as DeskAccountRouteImport } from './routes/desk.account'
+import { Route as DeskAdminRouteImport } from './routes/desk.admin'
+import { Route as DeskAdviceRouteImport } from './routes/desk.advice'
+import { Route as DeskFarmRouteImport } from './routes/desk.farm'
+import { Route as DeskLoansRouteImport } from './routes/desk.loans'
+import { Route as DeskOrdersRouteImport } from './routes/desk.orders'
+import { Route as DeskSaccoRouteImport } from './routes/desk.sacco'
+import { Route as DeskSellRouteImport } from './routes/desk.sell'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const DeskRoute = DeskRouteImport.update({
+  id: '/desk',
+  path: '/desk',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MarketplaceRoute = MarketplaceRouteImport.update({
-  id: '/marketplace',
-  path: '/marketplace',
+const MarketRoute = MarketRouteImport.update({
+  id: '/market',
+  path: '/market',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WelcomeRoute = WelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => rootRouteImport,
+const DeskIndexRoute = DeskIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DeskRoute,
 } as any)
-const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
+const DeskAccountRoute = DeskAccountRouteImport.update({
   id: '/account',
   path: '/account',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => DeskRoute,
 } as any)
-const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+const DeskAdminRoute = DeskAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => DeskRoute,
 } as any)
-const AuthenticatedAdviceRoute = AuthenticatedAdviceRouteImport.update({
+const DeskAdviceRoute = DeskAdviceRouteImport.update({
   id: '/advice',
   path: '/advice',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => DeskRoute,
 } as any)
-const AuthenticatedSaccoRoute = AuthenticatedSaccoRouteImport.update({
+const DeskFarmRoute = DeskFarmRouteImport.update({
+  id: '/farm',
+  path: '/farm',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskLoansRoute = DeskLoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskOrdersRoute = DeskOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskSaccoRoute = DeskSaccoRouteImport.update({
   id: '/sacco',
   path: '/sacco',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => DeskRoute,
 } as any)
-const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
-  id: '/workspace',
-  path: '/workspace',
-  getParentRoute: () => AuthenticatedRouteRoute,
+const DeskSellRoute = DeskSellRouteImport.update({
+  id: '/sell',
+  path: '/sell',
+  getParentRoute: () => DeskRoute,
 } as any)
-const ModulesModuleRoute = ModulesModuleRouteImport.update({
-  id: '/modules/$module',
-  path: '/modules/$module',
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/marketplace': typeof MarketplaceRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/welcome': typeof WelcomeRoute
-  '/account': typeof AuthenticatedAccountRoute
-  '/admin': typeof AuthenticatedAdminRoute
-  '/advice': typeof AuthenticatedAdviceRoute
-  '/sacco': typeof AuthenticatedSaccoRoute
-  '/workspace': typeof AuthenticatedWorkspaceRoute
-  '/modules/$module': typeof ModulesModuleRoute
+  '/desk': typeof DeskRouteWithChildren
+  '/login': typeof LoginRoute
+  '/market': typeof MarketRoute
+  '/signup': typeof SignupRoute
+  '/desk/account': typeof DeskAccountRoute
+  '/desk/admin': typeof DeskAdminRoute
+  '/desk/advice': typeof DeskAdviceRoute
+  '/desk/farm': typeof DeskFarmRoute
+  '/desk/loans': typeof DeskLoansRoute
+  '/desk/orders': typeof DeskOrdersRoute
+  '/desk/sacco': typeof DeskSaccoRoute
+  '/desk/sell': typeof DeskSellRoute
+  '/desk/': typeof DeskIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/marketplace': typeof MarketplaceRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/welcome': typeof WelcomeRoute
-  '/account': typeof AuthenticatedAccountRoute
-  '/admin': typeof AuthenticatedAdminRoute
-  '/advice': typeof AuthenticatedAdviceRoute
-  '/sacco': typeof AuthenticatedSaccoRoute
-  '/workspace': typeof AuthenticatedWorkspaceRoute
-  '/modules/$module': typeof ModulesModuleRoute
+  '/login': typeof LoginRoute
+  '/market': typeof MarketRoute
+  '/signup': typeof SignupRoute
+  '/desk/account': typeof DeskAccountRoute
+  '/desk/admin': typeof DeskAdminRoute
+  '/desk/advice': typeof DeskAdviceRoute
+  '/desk/farm': typeof DeskFarmRoute
+  '/desk/loans': typeof DeskLoansRoute
+  '/desk/orders': typeof DeskOrdersRoute
+  '/desk/sacco': typeof DeskSaccoRoute
+  '/desk/sell': typeof DeskSellRoute
+  '/desk': typeof DeskIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
-  '/marketplace': typeof MarketplaceRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/welcome': typeof WelcomeRoute
-  '/_authenticated/account': typeof AuthenticatedAccountRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRoute
-  '/_authenticated/advice': typeof AuthenticatedAdviceRoute
-  '/_authenticated/sacco': typeof AuthenticatedSaccoRoute
-  '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
-  '/modules/$module': typeof ModulesModuleRoute
+  '/desk': typeof DeskRouteWithChildren
+  '/login': typeof LoginRoute
+  '/market': typeof MarketRoute
+  '/signup': typeof SignupRoute
+  '/desk/account': typeof DeskAccountRoute
+  '/desk/admin': typeof DeskAdminRoute
+  '/desk/advice': typeof DeskAdviceRoute
+  '/desk/farm': typeof DeskFarmRoute
+  '/desk/loans': typeof DeskLoansRoute
+  '/desk/orders': typeof DeskOrdersRoute
+  '/desk/sacco': typeof DeskSaccoRoute
+  '/desk/sell': typeof DeskSellRoute
+  '/desk/': typeof DeskIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/auth'
-    | '/marketplace'
-    | '/reset-password'
-    | '/welcome'
-    | '/account'
-    | '/admin'
-    | '/advice'
-    | '/sacco'
-    | '/workspace'
-    | '/modules/$module'
+    | '/desk'
+    | '/login'
+    | '/market'
+    | '/signup'
+    | '/desk/account'
+    | '/desk/admin'
+    | '/desk/advice'
+    | '/desk/farm'
+    | '/desk/loans'
+    | '/desk/orders'
+    | '/desk/sacco'
+    | '/desk/sell'
+    | '/desk/'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/auth'
-    | '/marketplace'
-    | '/reset-password'
-    | '/welcome'
-    | '/account'
-    | '/admin'
-    | '/advice'
-    | '/sacco'
-    | '/workspace'
-    | '/modules/$module'
+    | '/login'
+    | '/market'
+    | '/signup'
+    | '/desk/account'
+    | '/desk/admin'
+    | '/desk/advice'
+    | '/desk/farm'
+    | '/desk/loans'
+    | '/desk/orders'
+    | '/desk/sacco'
+    | '/desk/sell'
+    | '/desk'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
-    | '/auth'
-    | '/marketplace'
-    | '/reset-password'
-    | '/welcome'
-    | '/_authenticated/account'
-    | '/_authenticated/admin'
-    | '/_authenticated/advice'
-    | '/_authenticated/sacco'
-    | '/_authenticated/workspace'
-    | '/modules/$module'
+    | '/desk'
+    | '/login'
+    | '/market'
+    | '/signup'
+    | '/desk/account'
+    | '/desk/admin'
+    | '/desk/advice'
+    | '/desk/farm'
+    | '/desk/loans'
+    | '/desk/orders'
+    | '/desk/sacco'
+    | '/desk/sell'
+    | '/desk/'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
-  MarketplaceRoute: typeof MarketplaceRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
-  WelcomeRoute: typeof WelcomeRoute
-  ModulesModuleRoute: typeof ModulesModuleRoute
+  DeskRoute: typeof DeskRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  MarketRoute: typeof MarketRoute
+  SignupRoute: typeof SignupRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -185,124 +223,150 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+    '/desk': {
+      id: '/desk'
+      path: '/desk'
+      fullPath: '/desk'
+      preLoaderRoute: typeof DeskRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/marketplace': {
-      id: '/marketplace'
-      path: '/marketplace'
-      fullPath: '/marketplace'
-      preLoaderRoute: typeof MarketplaceRouteImport
+    '/market': {
+      id: '/market'
+      path: '/market'
+      fullPath: '/market'
+      preLoaderRoute: typeof MarketRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/welcome': {
-      id: '/welcome'
-      path: '/welcome'
-      fullPath: '/welcome'
-      preLoaderRoute: typeof WelcomeRouteImport
-      parentRoute: typeof rootRouteImport
+    '/desk/': {
+      id: '/desk/'
+      path: '/'
+      fullPath: '/desk/'
+      preLoaderRoute: typeof DeskIndexRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/_authenticated/account': {
-      id: '/_authenticated/account'
+    '/desk/account': {
+      id: '/desk/account'
       path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AuthenticatedAccountRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      fullPath: '/desk/account'
+      preLoaderRoute: typeof DeskAccountRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/_authenticated/admin': {
-      id: '/_authenticated/admin'
+    '/desk/admin': {
+      id: '/desk/admin'
       path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AuthenticatedAdminRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      fullPath: '/desk/admin'
+      preLoaderRoute: typeof DeskAdminRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/_authenticated/advice': {
-      id: '/_authenticated/advice'
+    '/desk/advice': {
+      id: '/desk/advice'
       path: '/advice'
-      fullPath: '/advice'
-      preLoaderRoute: typeof AuthenticatedAdviceRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      fullPath: '/desk/advice'
+      preLoaderRoute: typeof DeskAdviceRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/_authenticated/sacco': {
-      id: '/_authenticated/sacco'
+    '/desk/farm': {
+      id: '/desk/farm'
+      path: '/farm'
+      fullPath: '/desk/farm'
+      preLoaderRoute: typeof DeskFarmRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/loans': {
+      id: '/desk/loans'
+      path: '/loans'
+      fullPath: '/desk/loans'
+      preLoaderRoute: typeof DeskLoansRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/orders': {
+      id: '/desk/orders'
+      path: '/orders'
+      fullPath: '/desk/orders'
+      preLoaderRoute: typeof DeskOrdersRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/sacco': {
+      id: '/desk/sacco'
       path: '/sacco'
-      fullPath: '/sacco'
-      preLoaderRoute: typeof AuthenticatedSaccoRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      fullPath: '/desk/sacco'
+      preLoaderRoute: typeof DeskSaccoRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/_authenticated/workspace': {
-      id: '/_authenticated/workspace'
-      path: '/workspace'
-      fullPath: '/workspace'
-      preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/desk/sell': {
+      id: '/desk/sell'
+      path: '/sell'
+      fullPath: '/desk/sell'
+      preLoaderRoute: typeof DeskSellRouteImport
+      parentRoute: typeof DeskRoute
     }
-    '/modules/$module': {
-      id: '/modules/$module'
-      path: '/modules/$module'
-      fullPath: '/modules/$module'
-      preLoaderRoute: typeof ModulesModuleRouteImport
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
-  AuthenticatedAdviceRoute: typeof AuthenticatedAdviceRoute
-  AuthenticatedSaccoRoute: typeof AuthenticatedSaccoRoute
-  AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
+interface DeskRouteChildren {
+  DeskAccountRoute: typeof DeskAccountRoute
+  DeskAdminRoute: typeof DeskAdminRoute
+  DeskAdviceRoute: typeof DeskAdviceRoute
+  DeskFarmRoute: typeof DeskFarmRoute
+  DeskLoansRoute: typeof DeskLoansRoute
+  DeskOrdersRoute: typeof DeskOrdersRoute
+  DeskSaccoRoute: typeof DeskSaccoRoute
+  DeskSellRoute: typeof DeskSellRoute
+  DeskIndexRoute: typeof DeskIndexRoute
 }
 
-const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAccountRoute: AuthenticatedAccountRoute,
-  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
-  AuthenticatedAdviceRoute: AuthenticatedAdviceRoute,
-  AuthenticatedSaccoRoute: AuthenticatedSaccoRoute,
-  AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
+const DeskRouteChildren: DeskRouteChildren = {
+  DeskAccountRoute: DeskAccountRoute,
+  DeskAdminRoute: DeskAdminRoute,
+  DeskAdviceRoute: DeskAdviceRoute,
+  DeskFarmRoute: DeskFarmRoute,
+  DeskLoansRoute: DeskLoansRoute,
+  DeskOrdersRoute: DeskOrdersRoute,
+  DeskSaccoRoute: DeskSaccoRoute,
+  DeskSellRoute: DeskSellRoute,
+  DeskIndexRoute: DeskIndexRoute,
 }
 
-const AuthenticatedRouteRouteWithChildren =
-  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+const DeskRouteWithChildren = DeskRoute._addFileChildren(DeskRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
-  MarketplaceRoute: MarketplaceRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
-  WelcomeRoute: WelcomeRoute,
-  ModulesModuleRoute: ModulesModuleRoute,
+  DeskRoute: DeskRouteWithChildren,
+  LoginRoute: LoginRoute,
+  MarketRoute: MarketRoute,
+  SignupRoute: SignupRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
+import type { createStart } from '@tanstack/react-start'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

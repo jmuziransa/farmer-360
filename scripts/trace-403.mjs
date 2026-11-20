@@ -1,0 +1,14 @@
+import { chromium } from "playwright";
+import { existsSync } from "node:fs";
+const browser = await chromium.launch({ executablePath: "/home/z/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome" });
+const page = await browser.newPage();
+page.on("response", (r) => { if (r.status() >= 400) console.log("HTTP", r.status(), r.request().method(), r.url().slice(0, 130)); });
+page.on("console", (m) => { if (m.type() === "error") console.log("CONSOLE:", m.text().slice(0, 160)); });
+await page.goto("http://127.0.0.1:8081/login", { waitUntil: "networkidle" });
+await page.fill('input[type="email"]', "farmer.demo@akatale.ug");
+await page.fill('input[type="password"]', "Harvest#2026");
+await page.click('button[type="submit"]');
+await page.waitForTimeout(6000);
+console.log("URL now:", page.url());
+console.log("Body has error:", (await page.innerText("body")).includes("Could not sign in"));
+await browser.close();
