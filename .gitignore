@@ -37,3 +37,5 @@ dist-ssr
 .grok/preview.pid
 screenshots/
 .node_modules.lock
+
+.env
