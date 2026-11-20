@@ -59,16 +59,19 @@ export function SheetContent({
   children,
   side = "right",
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & { side?: "left" | "right" }) {
+}: ComponentProps<typeof DialogPrimitive.Content> & { side?: "left" | "right" | "bottom" }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/45 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[86vw] max-w-sm flex-col bg-sidebar text-sidebar-foreground shadow-2xl data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300",
-          side === "left"
-            ? "left-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
-            : "right-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          "fixed z-50 flex flex-col bg-sidebar text-sidebar-foreground shadow-2xl data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300",
+          side === "left" &&
+            "inset-y-0 left-0 w-[86vw] max-w-sm data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+          side === "right" &&
+            "inset-y-0 right-0 w-[86vw] max-w-sm data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          side === "bottom" &&
+            "inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-2xl border-t border-white/10 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className,
         )}
         {...props}
@@ -122,16 +125,25 @@ export function DropdownItem({
   );
 }
 
-export function DropdownLabel({ className, ...props }: ComponentProps<typeof DropdownPrimitive.Label>) {
+export function DropdownLabel({
+  className,
+  ...props
+}: ComponentProps<typeof DropdownPrimitive.Label>) {
   return (
     <DropdownPrimitive.Label
-      className={cn("px-2.5 py-1.5 font-mono text-[10px] tracking-[0.12em] text-muted uppercase", className)}
+      className={cn(
+        "px-2.5 py-1.5 font-mono text-[10px] tracking-[0.12em] text-muted uppercase",
+        className,
+      )}
       {...props}
     />
   );
 }
 
-export function DropdownSeparator({ className, ...props }: ComponentProps<typeof DropdownPrimitive.Separator>) {
+export function DropdownSeparator({
+  className,
+  ...props
+}: ComponentProps<typeof DropdownPrimitive.Separator>) {
   return <DropdownPrimitive.Separator className={cn("my-1 h-px bg-line", className)} {...props} />;
 }
 
@@ -192,7 +204,9 @@ export function AccordionContent({
       className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
       {...props}
     >
-      <div className={cn("max-w-2xl pb-5 text-[14px] leading-relaxed text-muted", className)}>{children}</div>
+      <div className={cn("max-w-2xl pb-5 text-[14px] leading-relaxed text-muted", className)}>
+        {children}
+      </div>
     </AccordionPrimitive.Content>
   );
 }
@@ -204,7 +218,10 @@ export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
-      className={cn("inline-flex items-center gap-1 rounded-lg border border-line bg-canvas p-1", className)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-lg border border-line bg-canvas p-1",
+        className,
+      )}
       {...props}
     />
   );

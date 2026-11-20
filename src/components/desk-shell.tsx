@@ -8,10 +8,10 @@ import {
   HandCoins,
   Landmark,
   LayoutDashboard,
-  LogOut,
   Menu,
   MessageCircleQuestion,
   Package,
+  Plus,
   Search,
   Settings,
   ShieldCheck,
@@ -33,7 +33,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { toast } from "sonner";
+import {
+  AccountIdentityHeader,
+  AccountSwitchItems,
+  AccountSwitchProvider,
+  AccountSettingsRow,
+  AddAccountItem,
+  AddAccountRow,
+  SignOutDropdownItem,
+  SignOutRow,
+} from "@/components/account-menu";
 import { LogoMark, Wordmark } from "@/components/brand";
 import {
   DropdownMenu,
@@ -47,8 +56,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/overlays";
-import { Avatar, Badge, Button } from "@/components/ui";
-import { signOut } from "@/lib/auth/client";
+import { Avatar, Button } from "@/components/ui";
 import type { AppUser } from "@/lib/auth/use-current-user";
 import {
   listNotifications,
@@ -123,7 +131,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Administration",
     items: [
-      { to: "/desk/admin", label: "Approvals & members", icon: ShieldCheck, roles: ["admin", "officer"] },
+      {
+        to: "/desk/admin",
+        label: "Approvals & members",
+        icon: ShieldCheck,
+        roles: ["admin", "officer"],
+      },
     ],
   },
   {
@@ -177,7 +190,13 @@ function notificationIcon(kind: string): LucideIcon {
   }
 }
 
-export function DeskShell({ session, children }: { session: DeskSessionValue; children: ReactNode }) {
+export function DeskShell({
+  session,
+  children,
+}: {
+  session: DeskSessionValue;
+  children: ReactNode;
+}) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
   const title = PAGE_TITLES[pathname] ?? "Desk";
@@ -189,53 +208,60 @@ export function DeskShell({ session, children }: { session: DeskSessionValue; ch
 
   return (
     <DeskSessionContext.Provider value={session}>
-      <div className="min-h-screen bg-canvas">
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] lg:block">
-          <SidebarContent session={session} groups={groups} />
-        </aside>
+      <AccountSwitchProvider>
+        <div className="min-h-screen bg-canvas">
+          <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] lg:block">
+            <SidebarContent session={session} groups={groups} />
+          </aside>
 
-        <div className="lg:pl-[264px]">
-          <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur-md">
-            <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
-                    <Menu className="size-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[286px] max-w-[86vw] p-0">
-                  <SidebarContent
-                    session={session}
-                    groups={groups}
-                    onNavigate={() => setMobileOpen(false)}
-                    withClose
-                  />
-                </SheetContent>
-              </Sheet>
+          <div className="lg:pl-[264px]">
+            <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur-md">
+              <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="lg:hidden"
+                      aria-label="Open navigation"
+                    >
+                      <Menu className="size-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-[286px] max-w-[86vw] p-0">
+                    <SidebarContent
+                      session={session}
+                      groups={groups}
+                      onNavigate={() => setMobileOpen(false)}
+                      withClose
+                    />
+                  </SheetContent>
+                </Sheet>
 
-              <div className="hidden min-w-0 items-center gap-2 sm:flex">
-                <span className="font-mono text-[9.5px] tracking-[0.14em] text-muted uppercase">
-                  Desk
-                </span>
-                <span className="text-muted-soft">/</span>
-                <span className="truncate text-[13px] font-semibold text-ink">{title}</span>
+                <div className="hidden min-w-0 items-center gap-2 sm:flex">
+                  <span className="font-mono text-[9.5px] tracking-[0.14em] text-muted uppercase">
+                    Desk
+                  </span>
+                  <span className="text-muted-soft">/</span>
+                  <span className="truncate text-[13px] font-semibold text-ink">{title}</span>
+                </div>
+
+                <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+                  <QuickFind groups={groups} />
+                  <NotificationBell />
+                  <UserMenu session={session} />
+                </div>
               </div>
+            </header>
 
-              <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-                <QuickFind groups={groups} />
-                <NotificationBell />
-                <UserMenu session={session} />
-              </div>
-            </div>
-          </header>
+            <main className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">
+              {children}
+            </main>
+          </div>
 
-          <main className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">
-            {children}
-          </main>
+          <MobileTabBar session={session} pathname={pathname} />
         </div>
-
-        <MobileTabBar role={session.profile.role} pathname={pathname} />
-      </div>
+      </AccountSwitchProvider>
     </DeskSessionContext.Provider>
   );
 }
@@ -254,7 +280,8 @@ function SidebarContent({
   withClose?: boolean;
 }) {
   const { profile } = session;
-  const workspace = profile.farmName ?? (profile.role === "admin" ? "Farmer 360 desk" : profile.fullName);
+  const workspace =
+    profile.farmName ?? (profile.role === "admin" ? "Farmer 360 desk" : profile.fullName);
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -264,7 +291,12 @@ function SidebarContent({
         </Link>
         {withClose ? (
           <SheetClose asChild>
-            <Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/5 hover:text-white" aria-label="Close navigation">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-sidebar-muted hover:bg-white/5 hover:text-white"
+              aria-label="Close navigation"
+            >
               <X className="size-5" />
             </Button>
           </SheetClose>
@@ -272,19 +304,53 @@ function SidebarContent({
       </div>
 
       <div className="px-3 pt-4">
-        <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
-          <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-md bg-primary/20 text-[#8fbaff]">
-              <Sprout className="size-4" strokeWidth={1.7} />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-[12.5px] font-semibold text-white">{workspace}</p>
-              <p className="mt-0.5 truncate font-mono text-[9.5px] text-sidebar-muted">
-                {profile.district ?? "Uganda"} · {roleLabel(profile.role)}
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* Workspace card — the farm identity doubles as the account switcher:
+            dropping it down lists every role's account plus the farm actions. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Workspace and account options"
+              className="w-full rounded-lg border border-white/10 bg-white/[0.035] p-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              <div className="flex items-start gap-2.5">
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-md bg-primary/20 text-[#8fbaff]">
+                  <Sprout className="size-4" strokeWidth={1.7} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-semibold text-white">{workspace}</p>
+                  <p className="mt-0.5 truncate font-mono text-[9.5px] text-sidebar-muted">
+                    {profile.district ?? "Uganda"} · {roleLabel(profile.role)}
+                  </p>
+                </div>
+                <ChevronDown className="mt-1.5 size-3.5 shrink-0 text-sidebar-muted" />
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-64" align="start" side="top">
+            <AccountIdentityHeader session={session} />
+            <DropdownSeparator />
+            <AccountSwitchItems session={session} />
+            <DropdownSeparator />
+            <DropdownItem asChild>
+              <Link to="/desk/farm" search={{ new: 1 }}>
+                <Plus className="size-3.5" /> Add a new farm
+              </Link>
+            </DropdownItem>
+            <DropdownItem asChild>
+              <Link to="/desk/farm">
+                <Tractor className="size-3.5" /> Farm records
+              </Link>
+            </DropdownItem>
+            {profile.role === "admin" || profile.role === "officer" ? (
+              <DropdownItem asChild>
+                <Link to="/desk/admin">
+                  <ShieldCheck className="size-3.5" /> Approvals & members
+                </Link>
+              </DropdownItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <nav className="desk-scroll mt-4 flex-1 overflow-y-auto px-3 pb-4" aria-label="Desk">
@@ -337,43 +403,52 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5 border-t border-white/10 px-4 py-3">
-        <Avatar name={profile.fullName} size="sm" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-semibold text-white">{profile.fullName}</p>
-          <p className="truncate font-mono text-[9px] text-sidebar-muted">{roleLabel(profile.role)}</p>
-        </div>
-        <SignOutButton />
+      <div className="border-t border-white/10 p-3">
+        {/* The signed-in person: drop down to switch accounts, add one, or leave. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Your account"
+              className="flex w-full items-center gap-2.5 rounded-md border border-transparent px-1 py-1.5 transition-colors hover:border-white/10 hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              <Avatar name={profile.fullName} size="sm" />
+              <div className="min-w-0 flex-1 text-left">
+                <p className="truncate text-[12px] font-semibold text-white">{profile.fullName}</p>
+                <p className="truncate font-mono text-[9px] text-sidebar-muted">
+                  {roleLabel(profile.role)}
+                </p>
+              </div>
+              <ChevronDown className="size-3.5 shrink-0 text-sidebar-muted" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-64" align="start" side="top">
+            <AccountIdentityHeader session={session} />
+            <DropdownSeparator />
+            <AccountSwitchItems session={session} />
+            <DropdownSeparator />
+            <DropdownItem asChild>
+              <Link to="/desk/account">
+                <Settings className="size-3.5" /> Account settings
+              </Link>
+            </DropdownItem>
+            <AddAccountItem />
+            <DropdownSeparator />
+            <SignOutDropdownItem />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
 }
 
-function SignOutButton() {
-  const [busy, setBusy] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label="Sign out"
-      disabled={busy}
-      onClick={() => {
-        setBusy(true);
-        void signOut("/").catch((err: unknown) => {
-          setBusy(false);
-          toast.error(err instanceof Error ? err.message : "Could not sign out.");
-        });
-      }}
-      className="grid size-8 place-items-center rounded-md text-sidebar-muted transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
-    >
-      <LogOut className="size-4" />
-    </button>
-  );
-}
-
 /* ─────────────────────────────── Mobile tab bar ─────────────────────────────── */
 
-function MobileTabBar({ role, pathname }: { role: Role; pathname: string }) {
-  const items = MOBILE_NAV.filter((item) => !item.roles || item.roles.includes(role));
+function MobileTabBar({ session, pathname }: { session: DeskSessionValue; pathname: string }) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const items = MOBILE_NAV.filter(
+    (item) => !item.roles || item.roles.includes(session.profile.role),
+  );
   return (
     <nav
       aria-label="Desk sections"
@@ -382,6 +457,40 @@ function MobileTabBar({ role, pathname }: { role: Role; pathname: string }) {
       <div className="mx-auto grid max-w-lg grid-cols-5">
         {items.map((item) => {
           const active = item.to === "/desk" ? pathname === "/desk" : pathname.startsWith(item.to);
+          if (item.to === "/desk/account") {
+            // The Account tab opens the same account switcher as the sidebar
+            // instead of navigating, so switching identities works everywhere.
+            return (
+              <Sheet key={item.to} open={accountOpen} onOpenChange={setAccountOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors",
+                      active ? "text-primary" : "text-muted",
+                    )}
+                  >
+                    <item.icon className="size-5" strokeWidth={active ? 2 : 1.7} />
+                    {item.label}
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="gap-0 p-0">
+                  <div className="border-b border-white/10 px-4 py-3.5">
+                    <AccountIdentityHeader session={session} />
+                  </div>
+                  <div className="px-3 pb-1 pt-2">
+                    <AccountSwitchItems session={session} variant="rows" />
+                  </div>
+                  <div className="px-3 pb-4 pt-1">
+                    <AccountSettingsRow onNavigate={() => setAccountOpen(false)} />
+                    <AddAccountRow onNavigate={() => setAccountOpen(false)} />
+                    <div className="my-1.5 border-t border-line" />
+                    <SignOutRow />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            );
+          }
           return (
             <Link
               key={item.to}
@@ -505,7 +614,9 @@ function NotificationBell() {
 
   function markAll() {
     void markNotificationsRead({ data: { all: true } }).then(() => {
-      setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+      setItems((current) =>
+        current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })),
+      );
       setUnread(0);
     });
   }
@@ -513,7 +624,12 @@ function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
+        >
           <Bell className="size-[18px]" />
           {unread > 0 ? (
             <span className="absolute top-1 right-1 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[8px] leading-4 text-white">
@@ -555,8 +671,17 @@ function NotificationBell() {
             items.map((item) => {
               const Icon = notificationIcon(item.kind);
               return (
-                <DropdownItem key={item.id} asChild className="items-start gap-3 rounded-none border-b border-line/70 px-4 py-3 last:border-b-0">
-                  <a href={item.href ?? "/desk"} onClick={() => { void markNotificationsRead({ data: { id: item.id } }); }}>
+                <DropdownItem
+                  key={item.id}
+                  asChild
+                  className="items-start gap-3 rounded-none border-b border-line/70 px-4 py-3 last:border-b-0"
+                >
+                  <a
+                    href={item.href ?? "/desk"}
+                    onClick={() => {
+                      void markNotificationsRead({ data: { id: item.id } });
+                    }}
+                  >
                     <span
                       className={cn(
                         "mt-0.5 grid size-7 shrink-0 place-items-center rounded-md border",
@@ -568,7 +693,12 @@ function NotificationBell() {
                       <Icon className="size-3.5" strokeWidth={1.7} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className={cn("block text-[12px] leading-snug", item.readAt ? "text-ink/70" : "font-semibold text-ink")}>
+                      <span
+                        className={cn(
+                          "block text-[12px] leading-snug",
+                          item.readAt ? "text-ink/70" : "font-semibold text-ink",
+                        )}
+                      >
                         {item.title}
                       </span>
                       {item.body ? (
@@ -580,7 +710,9 @@ function NotificationBell() {
                         {timeAgo(item.createdAt)}
                       </span>
                     </span>
-                    {!item.readAt ? <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" /> : null}
+                    {!item.readAt ? (
+                      <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
+                    ) : null}
                   </a>
                 </DropdownItem>
               );
@@ -588,7 +720,10 @@ function NotificationBell() {
           )}
         </div>
         <div className="border-t border-line px-4 py-2.5">
-          <Link to="/desk" className="flex items-center justify-between text-[11.5px] font-semibold text-muted hover:text-ink">
+          <Link
+            to="/desk"
+            className="flex items-center justify-between text-[11.5px] font-semibold text-muted hover:text-ink"
+          >
             Open the overview <ArrowUpRight className="size-3.5" />
           </Link>
         </div>
@@ -600,8 +735,7 @@ function NotificationBell() {
 /* ─────────────────────────────── User menu ─────────────────────────────── */
 
 function UserMenu({ session }: { session: DeskSessionValue }) {
-  const { profile, user } = session;
-  const [busy, setBusy] = useState(false);
+  const { profile } = session;
 
   return (
     <DropdownMenu>
@@ -624,14 +758,7 @@ function UserMenu({ session }: { session: DeskSessionValue }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64">
-        <div className="px-2.5 py-2">
-          <p className="text-[13px] font-semibold text-ink">{profile.fullName}</p>
-          <p className="mt-0.5 truncate font-mono text-[10px] text-muted">{user.primaryEmail}</p>
-          <div className="mt-2 flex items-center gap-1.5">
-            <Badge tone="neutral">{roleLabel(profile.role)}</Badge>
-            {profile.district ? <Badge tone="outline">{profile.district}</Badge> : null}
-          </div>
-        </div>
+        <AccountIdentityHeader session={session} />
         <DropdownSeparator />
         <DropdownItem asChild>
           <Link to="/desk/account">
@@ -649,20 +776,10 @@ function UserMenu({ session }: { session: DeskSessionValue }) {
           </Link>
         </DropdownItem>
         <DropdownSeparator />
-        <DropdownItem
-          disabled={busy}
-          onSelect={(event) => {
-            event.preventDefault();
-            setBusy(true);
-            void signOut("/").catch((err: unknown) => {
-              setBusy(false);
-              toast.error(err instanceof Error ? err.message : "Could not sign out.");
-            });
-          }}
-          className="text-danger data-[highlighted]:bg-danger-soft"
-        >
-          <LogOut className="size-3.5" /> {busy ? "Signing out…" : "Sign out"}
-        </DropdownItem>
+        <AccountSwitchItems session={session} />
+        <DropdownSeparator />
+        <AddAccountItem />
+        <SignOutDropdownItem />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -692,9 +809,8 @@ export function DeskMissingProfile({ email }: { email: string | null }) {
           Your desk needs a role.
         </h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted">
-          {email ? `${email} is signed in, ` : ""}but no profile is attached yet. Complete
-          the short sign-up form so the desk knows whether you are a farmer, buyer or
-          SACCO officer.
+          {email ? `${email} is signed in, ` : ""}but no profile is attached yet. Complete the short
+          sign-up form so the desk knows whether you are a farmer, buyer or SACCO officer.
         </p>
         <Button asChild className="mt-5 w-full">
           <Link to="/signup">Complete sign-up</Link>

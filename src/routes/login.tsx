@@ -16,13 +16,21 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [seeding, setSeeding] = useState(true);
+  const [seedError, setSeedError] = useState(false);
 
   // The demo desk seeds itself the first time anyone opens the login page —
-  // the quick-fill accounts only work once their rows exist.
+  // the quick-fill accounts only work once their rows exist. A failed seed is
+  // NOT silent: quick-fill sign-ins would all fail with "Invalid email or
+  // password" and the visitor would have no idea why.
   useEffect(() => {
     let alive = true;
     void seedDesk()
-      .catch(() => undefined)
+      .catch(() => {
+        if (alive) {
+          setSeedError(true);
+          toast.error("The demo desk could not be prepared — reload the page to retry.");
+        }
+      })
       .finally(() => {
         if (alive) setSeeding(false);
       });
@@ -68,10 +76,24 @@ function LoginPage() {
           }}
         >
           <Field label="Email" htmlFor="login-email">
-            <Input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+            <Input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
           </Field>
           <Field label="Password" htmlFor="login-password">
-            <Input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+            <Input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
           </Field>
           <AuthError message={error} />
           <Button type="submit" className="w-full" size="lg" disabled={busy}>
@@ -87,6 +109,10 @@ function LoginPage() {
         {seeding ? (
           <p className="mt-3 text-center font-mono text-[9.5px] tracking-[0.12em] text-muted-soft uppercase">
             Preparing the demo desk…
+          </p>
+        ) : seedError ? (
+          <p className="mt-3 text-center font-mono text-[9.5px] tracking-[0.12em] text-danger uppercase">
+            Demo desk failed to prepare — reload to retry
           </p>
         ) : (
           <p className="mt-3 text-center font-mono text-[9.5px] tracking-[0.12em] text-muted-soft uppercase">

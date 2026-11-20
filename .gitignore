@@ -35,6 +35,7 @@ dist-ssr
 .vercel/
 .grok/preview.log
 .grok/preview.pid
+.localdb/
 screenshots/
 .node_modules.lock
 

@@ -73,10 +73,7 @@ function setBearerToken(token: string | null): void {
  * popup there and a normal redirect everywhere else.
  */
 function inLivePreview(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.location.hostname.endsWith(".grok-sandbox.com")
-  );
+  return typeof window !== "undefined" && window.location.hostname.endsWith(".grok-sandbox.com");
 }
 
 /** Message the popup posts back to the opener once sign-in completes. */
@@ -136,7 +133,11 @@ export async function signIn(
     if (typeof window !== "undefined") {
       const dest = new URL(callbackURL, window.location.origin);
       const here = window.location;
-      if (dest.origin !== here.origin || dest.pathname !== here.pathname || dest.search !== here.search) {
+      if (
+        dest.origin !== here.origin ||
+        dest.pathname !== here.pathname ||
+        dest.search !== here.search
+      ) {
         window.location.href = callbackURL;
       }
     }
@@ -204,6 +205,36 @@ function waitForPopupToken(popup: Window): Promise<string | null> {
     }
     window.addEventListener("message", onMessage);
   });
+}
+
+/**
+ * Sign in as a DIFFERENT account in place (the desk's account switcher).
+ *
+ * Better Auth issues a fresh session for the new user, so the cookie/bearer
+ * simply moves to the new identity — no separate sign-out round-trip. Any
+ * preview bearer token is cleared first so the new sign-in can never be
+ * attached to the old session, and the returned session token (when the
+ * response carries one, i.e. partitioned-cookie previews) becomes the bearer.
+ *
+ * Ends with a full-page navigation so every server-fetched view refetches
+ * under the new identity — cached role-scoped data must not leak across the
+ * switch.
+ */
+export async function switchAccount(
+  email: string,
+  password: string,
+  redirectTo = "/desk",
+): Promise<void> {
+  setBearerToken(null);
+  const { data, error } = await authClient.signIn.email({ email, password });
+  if (error) throw new Error(error.message ?? "Could not switch account");
+  const token = (data as { token?: string } | undefined)?.token;
+  if (token) setBearerToken(token);
+  // Hold the switch overlay up for a beat so the animation is actually seen
+  // before the hard navigation replaces the document (local servers answer in
+  // milliseconds; without this the swap reads as a blank flash).
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  window.location.assign(redirectTo);
 }
 
 /**

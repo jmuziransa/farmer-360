@@ -1,4 +1,5 @@
 import { getRequest } from "@tanstack/react-start/server";
+import { isPostgresUrl } from "../db";
 import { gateIdentityEnabled } from "./gate-identity.server";
 import { auth, authConfigured } from "./server";
 
@@ -12,8 +13,8 @@ import { auth, authConfigured } from "./server";
  * client-supplied user id — only the result of this verification.
  */
 
-/** True when a real database is configured server-side. */
-const databaseConfigured = Boolean(process.env.DATABASE_URL?.trim());
+/** True when a real Postgres database is configured server-side. */
+const databaseConfigured = isPostgresUrl(process.env.DATABASE_URL);
 
 /** Re-export so callers can branch on it without importing `server.ts`. */
 export { authConfigured };
@@ -54,9 +55,7 @@ export type VerifiedUser = { id: string; email: string | null };
  * as a bearer token, which we present as `Authorization: Bearer …` (the `bearer`
  * plugin resolves it). When deployed no token is passed and the cookie is used.
  */
-export async function getSessionUser(
-  bearerToken?: string,
-): Promise<VerifiedUser | null> {
+export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser | null> {
   if (!authConfigured && !gateIdentityEnabled()) return null;
   const request = getRequest();
   if (!request) return null;

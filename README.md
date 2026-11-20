@@ -65,15 +65,25 @@ migrations/auth/     Better Auth schema source (copied verbatim into migrations/
 scripts/             deploy migrator, auth invariant check, preview manager + their tests
 ```
 
-Auth has two modes, driven by `VITE_AUTH_ENABLED`:
+Auth runs through this app's own Better Auth (`/api/auth/*`) with local email/password
+enabled (`VITE_AUTH_ENABLED` in `.grok/app-env.json` is `"true"` in this app):
 
-- **Preview / development (`false`, the shipped default)** — server functions resolve a shared
-  dev user (`dev-user`), who owns the seeded demo content; the whole desk is explorable without
-  signing in.
-- **Deployed (`true`, set by the platform or your Vercel env)** — real sessions through Better
-  Auth; every server function scopes its queries by the verified caller id.
+- **Every session is a real session** — sign in on `/login` (or create an account on
+  `/signup`); every server function scopes its queries by the verified caller id.
+- The four demo accounts are seeded automatically at server bootstrap, so the
+  quick-fill accounts work the moment the server is up — on PGLite and on Postgres alike.
+- The desk's account switcher (sidebar workspace card, user rows, top-bar menu and the
+  mobile Account tab) signs you in as another persona in place; "Add account" opens the
+  sign-in page for any other account.
 
 ## Getting started
+
+```sh
+./startup.sh       # deps + database (Supabase/Neon URL, local Postgres — installing it
+                   # if missing — or the embedded PGLite fallback) + app on 0.0.0.0:8080
+```
+
+or, without the database provisioning:
 
 ```sh
 npm install
@@ -94,7 +104,7 @@ npm run preview    # serve the built output on 127.0.0.1:8081
 | Variable | Where | Effect |
 | --- | --- | --- |
 | `DATABASE_URL` | server env | Switch from PGLite to a real Postgres (e.g. Neon). No code changes needed. |
-| `VITE_AUTH_ENABLED` | `.grok/app-env.json` locally, provider env on deploy | `false` = shared dev user; `true` = real sign-in. The deploy platform sets it to `true`. |
+| `VITE_AUTH_ENABLED` | `.grok/app-env.json` locally, provider env on deploy | This app ships `"true"` (real email/password sign-in). `"false"` = shared dev user, only works without a database. |
 | `XAI_API_KEY` | server env | Enables the AI agronomist through xAI's OpenAI-compatible API (default model `grok-4.3`). |
 | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | server env | Alternative provider, any OpenAI-compatible endpoint. Used only when `XAI_API_KEY` is absent. |
 | `AI_MODEL` | server env | Override the default model for either provider. |

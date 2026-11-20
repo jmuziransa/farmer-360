@@ -267,6 +267,16 @@
   color: #ffffff;
 }
 
+/* Account switcher overlay — progress bar sweeps while the desk reloads. */
+@keyframes switchbar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
