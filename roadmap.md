@@ -1,0 +1,15 @@
+# Farm360 delivery
+- [x] Move navigation left and simplify crop/animal/custom entry with selectable units and added records below the form; demonstration flow verified.
+- [x] Connect Cloud and create isolated read-only demo records.
+- [x] Build and verify farmer demo, production lists, markets, reports and record interactions.
+- [x] Accounts, profiles and private farms.
+- [x] Verified-email super-administrator assignment and first-access password setup screens for the three designated addresses.
+- [x] Platform overview with server-enforced permissions and append-only audit trail.
+- [x] Basic private farm entries, archive/restore, CSV export, inventory items and append-only stock movements.
+- [x] Improve email password recovery, including expired-link handling and sign-out after password replacement.
+- [x] Add permission-checked crop/livestock problem advice through AI Gateway; real upstream crop-advice request verified.
+- [ ] Verify administrator confirmation, private record save/readback, recovery email and signed-in AI advice — needs an owner-created, email-verified account; no auth users exist.
+- [ ] Complete specialized farm histories, uploads, advanced reports, marketplace, offline sync and remaining master v2 modules — not yet implemented.
+- [ ] SACCO membership/accounting and lending — not yet implemented; requires a complete transactional ledger and organization permissions before real money use.
+- [ ] Live weather, transfers, SMS/WhatsApp/USSD, reminders and external provider adapters — not yet implemented; real transfers and delivery need provider authorization.- [x] Right-hand menu, admin link only for admins, module charts, marketplace with approval queue, SACCO savings/loans/repayments, admin listing & loan review with reasons.
+- [ ] Signed-in walkthrough of listing submission → admin approval → live — needs a signed-in admin session to test.

@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791987816750,
+      "tag": "0000_farm360_public_demo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792503559596,
+      "tag": "0001_farm360_accounts_private_farms",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793041385631,
+      "tag": "0002_verified_platform_administration",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793041477514,
+      "tag": "0003_private_farm_records_and_stock_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793800585281,
+      "tag": "0004_marketplace_and_sacco",
+      "breakpoints": true
+    }
+  ]
+}

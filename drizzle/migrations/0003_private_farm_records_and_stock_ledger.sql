@@ -1,0 +1,38 @@
+CREATE TABLE public.farm_entries (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), farm_id uuid NOT NULL REFERENCES public.farms(id), owner_id uuid NOT NULL, module text NOT NULL CHECK(module IN ('crops','livestock','poultry','eggs','milk','tasks','diseases','soil','warehouse','finance','budget')), name text NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 150), detail text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'Active', quantity numeric(12,3) NOT NULL DEFAULT 0 CHECK(quantity>=0), unit text NOT NULL DEFAULT '', amount_ugx bigint NOT NULL DEFAULT 0 CHECK(amount_ugx BETWEEN 0 AND 9007199254740991), record_date date NOT NULL DEFAULT CURRENT_DATE, archived_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), version integer NOT NULL DEFAULT 1
+);
+GRANT SELECT,INSERT,UPDATE ON public.farm_entries TO authenticated;
+GRANT ALL ON public.farm_entries TO service_role;
+ALTER TABLE public.farm_entries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Owner reads farm entries" ON public.farm_entries FOR SELECT TO authenticated USING(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE POLICY "Owner creates farm entries" ON public.farm_entries FOR INSERT TO authenticated WITH CHECK(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid() AND NOT f.archived));
+CREATE POLICY "Owner updates farm entries" ON public.farm_entries FOR UPDATE TO authenticated USING(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid())) WITH CHECK(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE INDEX farm_entries_farm_date ON public.farm_entries(farm_id,record_date);
+CREATE TABLE public.inventory_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),farm_id uuid NOT NULL REFERENCES public.farms(id),owner_id uuid NOT NULL,name text NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 150),unit text NOT NULL DEFAULT 'kg',minimum_stock numeric(12,3) NOT NULL DEFAULT 0 CHECK(minimum_stock>=0),archived_at timestamptz,created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT,INSERT,UPDATE ON public.inventory_items TO authenticated;
+GRANT ALL ON public.inventory_items TO service_role;
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Owner reads stock items" ON public.inventory_items FOR SELECT TO authenticated USING(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE POLICY "Owner creates stock items" ON public.inventory_items FOR INSERT TO authenticated WITH CHECK(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid() AND NOT f.archived));
+CREATE POLICY "Owner updates stock items" ON public.inventory_items FOR UPDATE TO authenticated USING(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid())) WITH CHECK(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE TABLE public.inventory_movements (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),item_id uuid NOT NULL REFERENCES public.inventory_items(id),farm_id uuid NOT NULL REFERENCES public.farms(id),owner_id uuid NOT NULL,quantity numeric(12,3) NOT NULL CHECK(quantity<>0),reason text NOT NULL CHECK(length(trim(reason)) BETWEEN 1 AND 500),record_date date NOT NULL DEFAULT CURRENT_DATE,created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT,INSERT ON public.inventory_movements TO authenticated;
+GRANT ALL ON public.inventory_movements TO service_role;
+ALTER TABLE public.inventory_movements ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Owner reads stock ledger" ON public.inventory_movements FOR SELECT TO authenticated USING(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE POLICY "Owner records stock movement" ON public.inventory_movements FOR INSERT TO authenticated WITH CHECK(owner_id=auth.uid() AND EXISTS(SELECT 1 FROM public.inventory_items i JOIN public.farms f ON f.id=i.farm_id WHERE i.id=item_id AND i.farm_id=inventory_movements.farm_id AND i.owner_id=auth.uid() AND f.owner_id=auth.uid() AND i.archived_at IS NULL AND NOT f.archived));
+CREATE INDEX inventory_movements_item ON public.inventory_movements(item_id);
+CREATE OR REPLACE FUNCTION public.validate_stock_movement() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$ DECLARE balance numeric; BEGIN PERFORM 1 FROM public.inventory_items WHERE id=NEW.item_id AND farm_id=NEW.farm_id AND owner_id=NEW.owner_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Item not found'; END IF; IF NEW.record_date>(now() AT TIME ZONE 'Africa/Kampala')::date THEN RAISE EXCEPTION 'Past records cannot use a future date'; END IF; SELECT coalesce(sum(quantity),0) INTO balance FROM public.inventory_movements WHERE item_id=NEW.item_id; IF balance+NEW.quantity<0 THEN RAISE EXCEPTION 'Not enough stock'; END IF; RETURN NEW; END; $$;
+CREATE TRIGGER validate_inventory_movement BEFORE INSERT ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.validate_stock_movement();
+CREATE TRIGGER immutable_inventory_movement BEFORE UPDATE OR DELETE ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.reject_platform_audit_mutation();
+CREATE OR REPLACE FUNCTION public.validate_farm_entry() RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$ BEGIN IF NEW.module NOT IN ('tasks','budget') AND NEW.record_date>(now() AT TIME ZONE 'Africa/Kampala')::date THEN RAISE EXCEPTION 'Past records cannot use a future date'; END IF; IF NEW.module='finance' AND NEW.status NOT IN ('Income','Expense') THEN RAISE EXCEPTION 'Finance must be income or expense'; END IF; IF TG_OP='UPDATE' THEN IF NEW.farm_id<>OLD.farm_id OR NEW.owner_id<>OLD.owner_id OR NEW.module<>OLD.module THEN RAISE EXCEPTION 'Record ownership and category cannot be changed'; END IF; NEW.version:=OLD.version+1; END IF; RETURN NEW; END; $$;
+CREATE TRIGGER validate_farm_entry BEFORE INSERT OR UPDATE ON public.farm_entries FOR EACH ROW EXECUTE FUNCTION public.validate_farm_entry();
+CREATE TABLE public.farm_activity_audit (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),farm_id uuid NOT NULL,actor_id uuid,action text NOT NULL,entity_id uuid NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT ON public.farm_activity_audit TO authenticated;
+GRANT ALL ON public.farm_activity_audit TO service_role;
+ALTER TABLE public.farm_activity_audit ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Owner reads own farm audit" ON public.farm_activity_audit FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM public.farms f WHERE f.id=farm_id AND f.owner_id=auth.uid()));
+CREATE OR REPLACE FUNCTION public.audit_farm_record() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$ BEGIN INSERT INTO public.farm_activity_audit(farm_id,actor_id,action,entity_id) VALUES(NEW.farm_id,auth.uid(),TG_TABLE_NAME||':'||lower(TG_OP),NEW.id); RETURN NEW; END; $$;
+CREATE TRIGGER audit_farm_entries AFTER INSERT OR UPDATE ON public.farm_entries FOR EACH ROW EXECUTE FUNCTION public.audit_farm_record();
+CREATE TRIGGER audit_inventory_movements AFTER INSERT ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.audit_farm_record();
+CREATE TRIGGER immutable_farm_audit BEFORE UPDATE OR DELETE ON public.farm_activity_audit FOR EACH ROW EXECUTE FUNCTION public.reject_platform_audit_mutation();
