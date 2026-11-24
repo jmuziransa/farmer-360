@@ -36,11 +36,8 @@ import {
   AccountIdentityHeader,
   AccountSwitchItems,
   AccountSwitchProvider,
-  AccountSettingsRow,
   AddAccountItem,
-  AddAccountRow,
   SignOutDropdownItem,
-  SignOutRow,
 } from "@/components/account-menu";
 import { LogoMark, Wordmark } from "@/components/brand";
 import {
@@ -321,13 +318,14 @@ function SidebarContent({
       </div>
 
       <div className="px-3 pt-4">
-        {/* Workspace card — the farm identity doubles as the account switcher:
-            dropping it down lists every role's account plus the farm actions. */}
+        {/* Workspace card — FARM options only: pick the active farm, add one,
+            or jump to farm records. Account switching lives exclusively in the
+            bottom user row (and the top-bar user menu), never here. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              aria-label="Workspace and account options"
+              aria-label="Workspace and farm options"
               className="w-full rounded-lg border border-white/10 bg-white/[0.035] p-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
               <div className="flex items-start gap-2.5">
@@ -347,11 +345,9 @@ function SidebarContent({
           <DropdownMenuContent className="w-64" align="start" side="top">
             <AccountIdentityHeader session={session} />
             <DropdownSeparator />
-            {/* Farms first: pick the active farm or add one — creation shows
-                up here instantly (the provider reloads the list). */}
+            {/* Farm creation shows up here instantly (the provider reloads
+                the list). */}
             <FarmSwitchItems />
-            <DropdownSeparator />
-            <AccountSwitchItems session={session} />
             <DropdownSeparator />
             <DropdownItem asChild>
               <Link to="/desk/farm">
@@ -461,10 +457,12 @@ function SidebarContent({
 /* ─────────────────────────────── Mobile tab bar ─────────────────────────────── */
 
 function MobileTabBar({ session, pathname }: { session: DeskSessionValue; pathname: string }) {
-  const [accountOpen, setAccountOpen] = useState(false);
   const items = MOBILE_NAV.filter(
     (item) => !item.roles || item.roles.includes(session.profile.role),
   );
+  // Pure navigation — no farm or account switchers here. Farms live in the
+  // sidebar workspace card (hamburger menu on mobile), accounts in the top-bar
+  // user menu, which stays visible on every screen size.
   return (
     <nav
       aria-label="Desk sections"
@@ -473,43 +471,6 @@ function MobileTabBar({ session, pathname }: { session: DeskSessionValue; pathna
       <div className="mx-auto grid max-w-lg grid-cols-5">
         {items.map((item) => {
           const active = item.to === "/desk" ? pathname === "/desk" : pathname.startsWith(item.to);
-          if (item.to === "/desk/account") {
-            // The Account tab opens the same account switcher as the sidebar
-            // instead of navigating, so switching identities works everywhere.
-            return (
-              <Sheet key={item.to} open={accountOpen} onOpenChange={setAccountOpen}>
-                <SheetTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors",
-                      active ? "text-primary" : "text-muted",
-                    )}
-                  >
-                    <item.icon className="size-5" strokeWidth={active ? 2 : 1.7} />
-                    {item.label}
-                  </button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="gap-0 p-0">
-                  <div className="border-b border-white/10 px-4 py-3.5">
-                    <AccountIdentityHeader session={session} />
-                  </div>
-                  <div className="px-3 pt-1">
-                    <FarmSwitchItems variant="rows" onNavigate={() => setAccountOpen(false)} />
-                  </div>
-                  <div className="px-3 pb-1 pt-2">
-                    <AccountSwitchItems session={session} variant="rows" />
-                  </div>
-                  <div className="px-3 pb-4 pt-1">
-                    <AccountSettingsRow onNavigate={() => setAccountOpen(false)} />
-                    <AddAccountRow onNavigate={() => setAccountOpen(false)} />
-                    <div className="my-1.5 border-t border-line" />
-                    <SignOutRow />
-                  </div>
-                </SheetContent>
-              </Sheet>
-            );
-          }
           return (
             <Link
               key={item.to}
@@ -779,10 +740,8 @@ function UserMenu({ session }: { session: DeskSessionValue }) {
       <DropdownMenuContent className="w-64">
         <AccountIdentityHeader session={session} />
         <DropdownSeparator />
-        {/* Farms first — switching the active farm is the top-right menu's
-            primary job; accounts come below. */}
-        <FarmSwitchItems />
-        <DropdownSeparator />
+        {/* ACCOUNT options only — farm switching lives in the sidebar's
+            workspace card, never in this menu. */}
         <DropdownItem asChild>
           <Link to="/desk/account">
             <Settings className="size-3.5" /> Account settings

@@ -87,6 +87,10 @@ export function SheetContent({
 export const DropdownMenu = DropdownPrimitive.Root;
 export const DropdownMenuTrigger = DropdownPrimitive.Trigger;
 
+// Instant open/close by design: the enter fade delayed the first paint, and
+// Radix keeps the content mounted through the exit animation — so pressing a
+// trigger again right after closing felt unresponsive. No animation classes
+// means the menu paints on press and unmounts immediately on close.
 export function DropdownMenuContent({
   className,
   align = "end",
@@ -99,7 +103,7 @@ export function DropdownMenuContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-52 overflow-hidden rounded-lg border border-line bg-surface p-1.5 shadow-[0_20px_50px_-20px_rgba(15,14,13,0.45)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "z-50 min-w-52 overflow-hidden rounded-lg border border-line bg-surface p-1.5 shadow-[0_20px_50px_-20px_rgba(15,14,13,0.45)]",
           className,
         )}
         {...props}

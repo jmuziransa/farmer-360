@@ -14,21 +14,22 @@ import { cn, roleLabel } from "@/lib/utils";
  * The desk's account switcher.
  *
  * One shared implementation for every surface that shows the signed-in
- * identity — the sidebar workspace card, the sidebar user row, the top-bar
- * user menu and the mobile tab bar — so switching accounts behaves identically
- * everywhere. Switching signs the visitor in as another account (the demo
- * personas ship with their credentials) and hard-navigates so every
- * role-scoped view refetches under the new identity; an overlay animation
- * covers the gap so the swap feels deliberate instead of a blank flash.
+ * identity — the sidebar user row and the top-bar user menu — so switching
+ * accounts behaves identically everywhere. Farm switching deliberately does
+ * NOT live here; it has its own menu (farm-menu.tsx, sidebar workspace card).
+ * Switching signs the visitor in as another account (the demo personas ship
+ * with their credentials) and hard-navigates so every role-scoped view
+ * refetches under the new identity; an overlay animation covers the gap so
+ * the swap feels deliberate instead of a blank flash.
  *
  * "Add account" opens the sign-in page for an account that is not a demo
  * persona; it always sits immediately above "Sign out".
  *
  * Two render variants exist for the same actions:
- *  - `dropdown` — Radix DropdownMenu items (sidebar card, user row, top menu).
- *    DropdownItem CRASHES outside a DropdownMenu root, so the mobile bottom
- *    sheet uses…
- *  - `rows` — plain styled links/buttons (mobile tab-bar sheet).
+ *  - `dropdown` — Radix DropdownMenu items (sidebar user row, top menu).
+ *    DropdownItem CRASHES outside a DropdownMenu root, so non-dropdown
+ *    surfaces use…
+ *  - `rows` — plain styled links/buttons.
  */
 
 type AccountSwitchValue = {
@@ -103,7 +104,7 @@ const rowClass =
 /**
  * One row per demo persona; the signed-in account is checked and disabled.
  * `variant="dropdown"` renders Radix menu items, `variant="rows"` plain
- * buttons for non-dropdown surfaces (the mobile bottom sheet).
+ * buttons for non-dropdown surfaces.
  */
 export function AccountSwitchItems({
   session,

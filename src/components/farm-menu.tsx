@@ -6,8 +6,8 @@ import { listMyFarms } from "@/lib/farm.functions";
 import { cn } from "@/lib/utils";
 
 /**
- * The desk's farm switcher — the "Farms" half of the top-right and sidebar
- * menus (the account half lives in account-menu.tsx).
+ * The desk's farm switcher — rendered in the sidebar workspace card (the one
+ * farm menu on the desk; account switching lives in account-menu.tsx).
  *
  * A FarmMenuProvider sits inside the desk shell and owns two things:
  *  - the list of the signed-in user's farms (light `listMyFarms` fetch,
@@ -17,9 +17,8 @@ import { cn } from "@/lib/utils";
  *    in localStorage per user, so a reload keeps the context.
  *
  * QA contract: after `saveFarm` the caller calls `reload()` (and usually
- * `setActiveFarm(id)`), and every dropdown labelled "Farms" — sidebar
- * workspace card, top-right user menu, mobile account sheet — shows the new
- * farm immediately.
+ * `setActiveFarm(id)`), and the workspace-card dropdown — the sidebar on
+ * desktop and the hamburger sheet on mobile — shows the new farm immediately.
  */
 
 export type FarmSummary = {
@@ -111,7 +110,7 @@ const rowClass =
  * One row per farm; the active farm is checked and disabled. Selecting a farm
  * switches the desk-wide context and opens the farm-records page on it.
  * `variant="dropdown"` renders Radix menu items, `variant="rows"` plain
- * buttons for the mobile bottom sheet.
+ * buttons for non-dropdown surfaces.
  */
 export function FarmSwitchItems({
   variant = "dropdown",
