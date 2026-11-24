@@ -16,6 +16,10 @@
 #   5. Summarises: what was updated, what still needs attention.
 #
 # It does NOT start the app — run ./run.sh after updating.
+#
+# It is safe to run with sudo: drop_root (from scripts/lib-db.sh, which also
+# holds the shared database logic used by run.sh and startup.sh) re-executes
+# as the normal user first.
 set -u
 cd "$(dirname "$0")"
 
@@ -23,9 +27,13 @@ LOG()  { printf '[update] %s\n' "$*"; }
 OK()   { printf '[update] ✔ %s\n' "$*"; }
 WARN() { printf '[update] ⚠ %s\n' "$*"; }
 ERR()  { printf '[update] ✖ %s\n' "$*"; }
+log()  { LOG "$@"; }
 
 PROBLEMS=0
 note_problem() { PROBLEMS=$((PROBLEMS + 1)); }
+
+. ./scripts/lib-db.sh
+drop_root "$@"
 
 if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
   WARN "the app is currently running on port 8080 — updating under it is fine, but run ./run.sh again afterwards if the dev server picks up stale packages"
@@ -95,14 +103,9 @@ if printf '%s' "$AUDIT" | grep -q "vulnerabilities"; then
 fi
 
 # ── 2. Database ──────────────────────────────────────────────────────────────
-LOG "applying database migrations…"
-if npm run db:migrate >/tmp/update-migrate.log 2>&1; then
-  OK "migrations applied"
-else
-  ERR "migrations failed — see /tmp/update-migrate.log"
-  tail -n 15 /tmp/update-migrate.log 2>/dev/null | sed 's/^/         /'
-  note_problem
-fi
+LOG "resolving the database (hosted URL, or local cluster — see lib-db.sh)…"
+resolve_database 0
+PROBLEMS=$((PROBLEMS + DB_PROBLEMS))
 
 # ── 3. Full verification sweep: every file, every check ─────────────────────
 LOG "TypeScript check (tsc --noEmit)…"

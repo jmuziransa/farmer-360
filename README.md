@@ -78,12 +78,22 @@ enabled (`VITE_AUTH_ENABLED` in `.grok/app-env.json` is `"true"` in this app):
 
 ## Getting started
 
+Three shell entry points share one database bootstrap (`scripts/lib-db.sh`) and are
+all safe to run with sudo — they re-execute as the normal user, because Postgres
+(`initdb`, `postgres`) refuses to run as root:
+
 ```sh
-./startup.sh       # deps + database (Supabase/Neon URL, local Postgres — installing it
-                   # if missing — or the embedded PGLite fallback) + app on 0.0.0.0:8080
+./startup.sh       # fresh machine / Codespace: installs Postgres if missing, starts the
+                   # database (Supabase/Neon URL, local cluster on 5432/5433, or the
+                   # embedded PGLite fallback), starts the app in the background and
+                   # verifies it responds on 0.0.0.0:8080
+./run.sh           # daily dev run: dependency + build checks (report-only), database
+                   # start/init + migrations, app in the foreground
+./update.sh        # applies safe dependency updates (npm update) + full verification
+                   # sweep (typecheck, lint, tests, build) — never starts the app
 ```
 
-or, without the database provisioning:
+or, without any provisioning:
 
 ```sh
 npm install
