@@ -111,10 +111,18 @@ const LOCAL_DEV_ORIGINS: string[] = [
   "http://127.0.0.1:8081",
   "http://[::1]:8081",
 ];
+
+// GitHub Codespaces (and similar tunnelled previews) expose the app on a fresh
+// `https://<codespace-name>-8080.app.github.dev` host that changes on every
+// rebuild, so it can't be pre-registered. Trust the whole wildcard: these URLs
+// are private to the Codespace owner, and email/password sign-in (the demo
+// accounts) does a same-origin credentialed POST that Better Auth's origin
+// check would otherwise reject with "Invalid origin".
+const TUNNEL_HOSTS: string[] = ["*.app.github.dev"];
 const baseURL = explicitBaseURL ?? {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
-  // (not only the preview wildcard).
-  allowedHosts: [...previewAllowedHosts, "localhost", "127.0.0.1", "[::1]"],
+  // (not only the preview wildcard), plus Codespace tunnel hosts.
+  allowedHosts: [...previewAllowedHosts, ...TUNNEL_HOSTS, "localhost", "127.0.0.1", "[::1]"],
   // `auto` → trust both http:// and https:// expansions of allowedHosts
   // (preview is https; local dev is http).
   protocol: "auto" as const,
@@ -123,15 +131,16 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+const trustedOrigins: string[] = [
+  // Host wildcards (matched against Origin's host)
+  ...previewAllowedHosts,
+  ...TUNNEL_HOSTS,
+  // Full-origin wildcards (matched against Origin)
+  ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+  ...TUNNEL_HOSTS.flatMap((host) => [`https://${host}`, `http://${host}`]),
+  ...LOCAL_DEV_ORIGINS,
+  ...(explicitBaseURL ? [explicitBaseURL] : []),
+];
 
 // Only a real Postgres URL selects the pg pool for Better Auth (see
 // `isPostgresUrl` in db.ts — non-postgres values fall back to PGLite).

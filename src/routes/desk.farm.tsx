@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Archive, Download, Pencil, Plus, RotateCcw, Sprout, Tractor } from "lucide-react";
 import { toast } from "sonner";
 import { useDeskSession } from "@/components/desk-shell";
+import { useFarmMenu } from "@/components/farm-menu";
 import {
   Badge,
   Button,
@@ -224,6 +225,7 @@ function RecordFields({
 
 function FarmPage() {
   const { profile } = useDeskSession();
+  const farmMenu = useFarmMenu();
   const intent = Route.useSearch();
   const navigate = useNavigate();
   const [data, setData] = useState<Awaited<ReturnType<typeof getFarmWorkspace>> | null>(null);
@@ -252,6 +254,12 @@ function FarmPage() {
     load();
   }, []);
 
+  // The desk-wide active farm (chosen in any "Farms" dropdown) drives this
+  // page's selection; picking a farm HERE also updates the desk-wide context.
+  useEffect(() => {
+    if (farmMenu.activeFarmId !== null) setFarmId(String(farmMenu.activeFarmId));
+  }, [farmMenu.activeFarmId]);
+
   // Arriving with ?new=1 (sidebar "Add a new farm") opens the farm form, then
   // strips the intent from the URL so a reload doesn't re-open it.
   useEffect(() => {
@@ -260,10 +268,11 @@ function FarmPage() {
     void navigate({ to: "/desk/farm", search: {}, replace: true });
   }, [intent.new, navigate]);
 
-  const farms = data?.farms ?? [];
+  // Stable identities so the useMemo hooks below don't re-run every render.
+  const farms = useMemo(() => data?.farms ?? [], [data]);
+  const entries = useMemo(() => data?.entries ?? [], [data]);
   const activeFarm =
     farms.find((f) => String(f.id) === farmId) ?? farms.find((f) => !f.archived) ?? farms[0];
-  const entries = data?.entries ?? [];
   const items = useMemo(
     () => (data?.items ?? []).filter((i) => !activeFarm || i.farmId === activeFarm.id),
     [data, activeFarm],
@@ -357,8 +366,16 @@ function FarmPage() {
       });
       setFarmForm(null);
       load();
-      toast.success(farmForm?.id ? "Farm updated." : "Farm created.");
-      if (!farmForm?.id && result.id) setFarmId(String(result.id));
+      if (!farmForm?.id && result.id) {
+        // New farm: make it the desk-wide active farm and refresh every Farms
+        // dropdown so it appears immediately, then say so.
+        farmMenu.setActiveFarm(result.id);
+        void farmMenu.reload();
+        toast.success("Farm created — it is now selected.");
+      } else {
+        void farmMenu.reload();
+        toast.success("Farm updated.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to save the farm.");
     } finally {
@@ -469,7 +486,10 @@ function FarmPage() {
           className="w-64"
           aria-label="Choose farm"
           value={activeFarm ? String(activeFarm.id) : ""}
-          onChange={(e) => setFarmId(e.target.value)}
+          onChange={(e) => {
+            setFarmId(e.target.value);
+            farmMenu.setActiveFarm(e.target.value ? Number(e.target.value) : null);
+          }}
         >
           {farms.map((f) => (
             <option key={f.id} value={f.id}>
@@ -498,6 +518,7 @@ function FarmPage() {
                   .then(() => {
                     toast.success(activeFarm.archived ? "Farm restored." : "Farm archived.");
                     load();
+                    void farmMenu.reload();
                   })
                   .catch((err: unknown) =>
                     toast.error(err instanceof Error ? err.message : "Could not update the farm."),

@@ -165,7 +165,12 @@ function mapMovement(row: MovementRow): StockMovement {
   };
 }
 
-async function ownedFarm(sql: Awaited<ReturnType<typeof getSql>>, farmId: number, userId: string, opts?: { requireActive?: boolean }) {
+async function ownedFarm(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  farmId: number,
+  userId: string,
+  opts?: { requireActive?: boolean },
+) {
   const rows = await sql<{ id: number; archived: boolean }>`
     select id, archived from farms where id = ${farmId} and owner_id = ${userId}
   `;
@@ -175,17 +180,71 @@ async function ownedFarm(sql: Awaited<ReturnType<typeof getSql>>, farmId: number
   return farm;
 }
 
+/**
+ * Farm records belong to farmer (and administrator) desks only. Buyers and
+ * SACCO officers get a clear refusal instead of a silently empty workspace —
+ * the desk nav hides the entry points, and this guards direct URL access and
+ * the server functions themselves.
+ */
+async function requireFarmKeeper(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
+  const rows = await sql<{ role: string }>`
+    select role from profiles where user_id = ${userId}
+  `;
+  const role = rows[0]?.role;
+  if (role !== "farmer" && role !== "admin") {
+    throw new Error("Only farmer and administrator accounts keep farm records.");
+  }
+}
+
+/**
+ * Light farm list for the desk's Farms dropdowns — ids, names and locations
+ * only (no entries, stock or movements), so opening a menu stays cheap.
+ */
+export const listMyFarms = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(
+    async ({
+      context,
+    }): Promise<
+      { id: number; name: string; district: string; farmType: string; archived: boolean }[]
+    > => {
+      const sql = await getSql();
+      const rows = await sql<FarmRow>`
+      select id, owner_id, name, district, village, size_acres, soil_type, water_source, farm_type, archived, created_at
+      from farms
+      where owner_id = ${context.userId}
+      order by archived, created_at
+    `;
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        district: row.district,
+        farmType: row.farm_type,
+        archived: row.archived,
+      }));
+    },
+  );
+
 export const getFarmWorkspace = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<{ farms: Farm[]; entries: FarmEntry[]; items: InventoryItem[]; movements: StockMovement[] }> => {
-    const sql = await getSql();
-    const [farmRows, entryRows, itemRows, movementRows] = await Promise.all([
-      sql<FarmRow>`select * from farms where owner_id = ${context.userId} order by created_at`,
-      sql<EntryRow>`
+  .handler(
+    async ({
+      context,
+    }): Promise<{
+      farms: Farm[];
+      entries: FarmEntry[];
+      items: InventoryItem[];
+      movements: StockMovement[];
+    }> => {
+      const sql = await getSql();
+      await requireFarmKeeper(sql, context.userId);
+      const [farmRows, entryRows, itemRows, movementRows] = await Promise.all([
+        sql<FarmRow>`select * from farms where owner_id = ${context.userId} order by created_at`,
+        sql<EntryRow>`
         select * from farm_entries where owner_id = ${context.userId}
         order by record_date desc, id desc
       `,
-      sql<ItemRow>`
+        sql<ItemRow>`
         select i.*, coalesce((
           select sum(quantity) from inventory_movements m where m.item_id = i.id
         ), 0)::float8 as balance
@@ -193,50 +252,56 @@ export const getFarmWorkspace = createServerFn({ method: "GET" })
         where i.owner_id = ${context.userId}
         order by i.name
       `,
-      sql<MovementRow>`
+        sql<MovementRow>`
         select m.*, i.name as item_name from inventory_movements m
         join inventory_items i on i.id = m.item_id
         where m.owner_id = ${context.userId}
         order by m.created_at desc
       `,
-    ]);
-    return {
-      farms: farmRows.map(mapFarm),
-      entries: entryRows.map(mapEntry),
-      items: itemRows.map(mapItem),
-      movements: movementRows.map(mapMovement),
-    };
-  });
+      ]);
+      return {
+        farms: farmRows.map(mapFarm),
+        entries: entryRows.map(mapEntry),
+        items: itemRows.map(mapItem),
+        movements: movementRows.map(mapMovement),
+      };
+    },
+  );
 
 export const saveFarm = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: {
-    id?: number;
-    name: string;
-    district?: string;
-    village?: string;
-    sizeAcres?: number;
-    soilType?: string;
-    waterSource?: string;
-    farmType?: string;
-  }) => {
-    const name = input.name?.trim();
-    if (!name || name.length > 150) throw new Error("Give the farm a name (up to 150 characters).");
-    const size = Number(input.sizeAcres ?? 0);
-    if (!Number.isFinite(size) || size < 0) throw new Error("Size in acres must be zero or more.");
-    return {
-      id: input.id,
-      name,
-      district: input.district?.trim() || "",
-      village: input.village?.trim() || "",
-      sizeAcres: size,
-      soilType: input.soilType?.trim() || "",
-      waterSource: input.waterSource?.trim() || "",
-      farmType: input.farmType?.trim() || "Mixed farming",
-    };
-  })
+  .validator(
+    (input: {
+      id?: number;
+      name: string;
+      district?: string;
+      village?: string;
+      sizeAcres?: number;
+      soilType?: string;
+      waterSource?: string;
+      farmType?: string;
+    }) => {
+      const name = input.name?.trim();
+      if (!name || name.length > 150)
+        throw new Error("Give the farm a name (up to 150 characters).");
+      const size = Number(input.sizeAcres ?? 0);
+      if (!Number.isFinite(size) || size < 0)
+        throw new Error("Size in acres must be zero or more.");
+      return {
+        id: input.id,
+        name,
+        district: input.district?.trim() || "",
+        village: input.village?.trim() || "",
+        sizeAcres: size,
+        soilType: input.soilType?.trim() || "",
+        waterSource: input.waterSource?.trim() || "",
+        farmType: input.farmType?.trim() || "Mixed farming",
+      };
+    },
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     if (data.id) {
       await ownedFarm(sql, data.id, context.userId);
       await sql`
@@ -264,6 +329,7 @@ export const setFarmArchived = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     await ownedFarm(sql, data.id, context.userId);
     await sql`update farms set archived = ${data.archived} where id = ${data.id} and owner_id = ${context.userId}`;
     return { ok: true as const };
@@ -278,6 +344,7 @@ export const saveFarmEntry = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     await ownedFarm(sql, data.farmId, context.userId, { requireActive: true });
     if (data.id) {
       await sql`
@@ -305,6 +372,7 @@ export const setEntryArchived = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     await ownedFarm(sql, data.farmId, context.userId);
     const stamp = data.restore ? null : new Date().toISOString();
     const updated = await sql<{ id: number }>`
@@ -325,11 +393,13 @@ export const createInventoryItem = createServerFn({ method: "POST" })
     const unit = input.unit?.trim();
     if (!unit || unit.length > 30) throw new Error("Choose a unit.");
     const minimum = Number(input.minimum ?? 0);
-    if (!Number.isFinite(minimum) || minimum < 0 || minimum > 999_999_999) throw new Error("Minimum stock must be zero or more.");
+    if (!Number.isFinite(minimum) || minimum < 0 || minimum > 999_999_999)
+      throw new Error("Minimum stock must be zero or more.");
     return { farmId: input.farmId, name, unit, minimum };
   })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     await ownedFarm(sql, data.farmId, context.userId, { requireActive: true });
     const created = await sql<{ id: number }>`
       insert into inventory_items (farm_id, owner_id, name, unit, minimum_stock)
@@ -341,19 +411,22 @@ export const createInventoryItem = createServerFn({ method: "POST" })
 
 export const recordStockMovement = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { itemId: number; farmId: number; quantity: number; reason: string; date: string }) => {
-    if (!input.itemId || !input.farmId) throw new Error("Missing stock item.");
-    const quantity = Number(input.quantity);
-    if (!Number.isFinite(quantity) || quantity === 0 || Math.abs(quantity) > 999_999_999) {
-      throw new Error("Quantity must be a non-zero number.");
-    }
-    const reason = input.reason?.trim();
-    if (!reason || reason.length > 500) throw new Error("Say why this movement happened.");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date ?? "")) throw new Error("Choose a valid date.");
-    return { itemId: input.itemId, farmId: input.farmId, quantity, reason, date: input.date };
-  })
+  .validator(
+    (input: { itemId: number; farmId: number; quantity: number; reason: string; date: string }) => {
+      if (!input.itemId || !input.farmId) throw new Error("Missing stock item.");
+      const quantity = Number(input.quantity);
+      if (!Number.isFinite(quantity) || quantity === 0 || Math.abs(quantity) > 999_999_999) {
+        throw new Error("Quantity must be a non-zero number.");
+      }
+      const reason = input.reason?.trim();
+      if (!reason || reason.length > 500) throw new Error("Say why this movement happened.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date ?? "")) throw new Error("Choose a valid date.");
+      return { itemId: input.itemId, farmId: input.farmId, quantity, reason, date: input.date };
+    },
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await requireFarmKeeper(sql, context.userId);
     await ownedFarm(sql, data.farmId, context.userId);
     const items = await sql<{ id: number; archived_at: string | null }>`
       select id, archived_at from inventory_items
@@ -368,9 +441,11 @@ export const recordStockMovement = createServerFn({ method: "POST" })
       `;
     } catch (err) {
       // The ledger trigger rejects future dates and negative balances.
-      throw new Error(err instanceof Error && /Not enough stock|future date/.test(err.message)
-        ? err.message
-        : "Stock movement refused. Check available stock and the date.");
+      throw new Error(
+        err instanceof Error && /Not enough stock|future date/.test(err.message)
+          ? err.message
+          : "Stock movement refused. Check available stock and the date.",
+      );
     }
     return { ok: true as const };
   });
@@ -401,30 +476,31 @@ export type DemoFarmSnapshot = {
  * No middleware — visitors see module names, statuses and quantities only,
  * never the owner's identity or individual money movements.
  */
-export const publicDemoFarm = createServerFn({ method: "GET" }).handler(async (): Promise<DemoFarmSnapshot | null> => {
-  const sql = await getSql();
-  const farms = await sql<{
-    id: number;
-    name: string;
-    district: string;
-    village: string;
-    size_acres: string | number;
-  }>`
+export const publicDemoFarm = createServerFn({ method: "GET" }).handler(
+  async (): Promise<DemoFarmSnapshot | null> => {
+    const sql = await getSql();
+    const farms = await sql<{
+      id: number;
+      name: string;
+      district: string;
+      village: string;
+      size_acres: string | number;
+    }>`
     select f.id, f.name, f.district, f.village, f.size_acres
     from farms f
     join profiles p on p.user_id = f.owner_id
     where p.farm_name = ${"Nakato Family Farm"} and f.archived = false
     order by f.id limit 1
   `;
-  const farm = farms[0];
-  if (!farm) return null;
-  const [stats, records] = await Promise.all([
-    sql<{
-      crop_count: number;
-      animal_count: number;
-      income: string | number;
-      expense: string | number;
-    }>`
+    const farm = farms[0];
+    if (!farm) return null;
+    const [stats, records] = await Promise.all([
+      sql<{
+        crop_count: number;
+        animal_count: number;
+        income: string | number;
+        expense: string | number;
+      }>`
       select
         (select count(*)::int from farm_entries where farm_id = ${farm.id} and module = 'crops' and archived_at is null) as crop_count,
         (
@@ -440,32 +516,33 @@ export const publicDemoFarm = createServerFn({ method: "GET" }).handler(async ()
           where farm_id = ${farm.id} and module = 'finance' and status = 'Expense' and archived_at is null
         ) as expense
     `,
-    sql<EntryRow>`
+      sql<EntryRow>`
       select * from farm_entries
       where farm_id = ${farm.id} and archived_at is null and module <> 'tasks'
       order by record_date desc, id desc limit 6
     `,
-  ]);
-  const row = stats[0];
-  return {
-    name: farm.name,
-    district: farm.district,
-    village: farm.village,
-    sizeAcres: num(farm.size_acres),
-    cropCount: row?.crop_count ?? 0,
-    animalCount: row?.animal_count ?? 0,
-    financeIncome: num(row?.income ?? 0),
-    financeExpense: num(row?.expense ?? 0),
-    records: records.map((r) => ({
-      module: r.module,
-      name: r.name,
-      status: r.status,
-      quantity: num(r.quantity),
-      unit: r.unit,
-      recordDate: String(r.record_date).slice(0, 10),
-    })),
-  };
-});
+    ]);
+    const row = stats[0];
+    return {
+      name: farm.name,
+      district: farm.district,
+      village: farm.village,
+      sizeAcres: num(farm.size_acres),
+      cropCount: row?.crop_count ?? 0,
+      animalCount: row?.animal_count ?? 0,
+      financeIncome: num(row?.income ?? 0),
+      financeExpense: num(row?.expense ?? 0),
+      records: records.map((r) => ({
+        module: r.module,
+        name: r.name,
+        status: r.status,
+        quantity: num(r.quantity),
+        unit: r.unit,
+        recordDate: String(r.record_date).slice(0, 10),
+      })),
+    };
+  },
+);
 
 /** Store items matching a crop name, for the "list produce" availability hint. */
 export const stockForCrop = createServerFn({ method: "GET" })

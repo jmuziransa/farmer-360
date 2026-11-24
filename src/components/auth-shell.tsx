@@ -41,8 +41,8 @@ export function AuthShell({
             A record the farm, the buyer and the SACCO can all agree on.
           </h2>
           <p className="mt-4 text-[13.5px] leading-relaxed text-sidebar-muted">
-            The same desk the pilot uses in Mukono, Kampala and Masaka. Sign in
-            with a demo account and every row is already written.
+            The same desk the pilot uses in Mukono, Kampala and Masaka. Sign in with a demo account
+            and every row is already written.
           </p>
         </div>
 
@@ -66,10 +66,14 @@ export function AuthShell({
                 <button
                   key={account.email}
                   type="button"
-                  disabled={!onPick || seeding}
+                  // Fill works even while the demo desk is still preparing —
+                  // clicks during the "Preparing" window used to be swallowed
+                  // (the QA "needs two interactions" report).
+                  disabled={!onPick}
                   onClick={() => onPick?.(account)}
+                  title="Click to fill the form"
                   className={cn(
-                    "group flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors disabled:cursor-wait disabled:opacity-60",
+                    "group flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors disabled:cursor-wait disabled:opacity-60",
                     active
                       ? "border-primary bg-primary/20"
                       : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]",
@@ -86,6 +90,9 @@ export function AuthShell({
                   <span className="flex shrink-0 items-center gap-2">
                     <span className="hidden font-mono text-[9px] text-sidebar-muted sm:block">
                       {account.password}
+                    </span>
+                    <span className="font-mono text-[8.5px] tracking-[0.1em] text-[#8fbaff] uppercase opacity-0 transition-opacity group-hover:opacity-100">
+                      Fill
                     </span>
                     <ArrowUpRight className="size-3.5 text-[#8fbaff] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                   </span>
@@ -164,7 +171,10 @@ export function AuthShell({
 export function AuthError({ message }: { message: string }) {
   if (!message) return null;
   return (
-    <p className="rounded-md border border-danger/25 bg-danger-soft px-3.5 py-3 text-[12.5px] text-danger" role="alert">
+    <p
+      className="rounded-md border border-danger/25 bg-danger-soft px-3.5 py-3 text-[12.5px] text-danger"
+      role="alert"
+    >
       {message}
     </p>
   );

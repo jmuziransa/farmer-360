@@ -127,8 +127,15 @@ export async function runDemoSeed(): Promise<{ seeded: boolean }> {
     }
 
     const farmerId = ids["farmer.demo@akatale.ug"];
-    const existing = await sql<{ n: number }>`select count(*)::int as n from listings`;
-    if ((existing[0]?.n ?? 0) === 0 && farmerId) {
+    // Market/finance seed — checked PER OWNER, not "table empty": if the
+    // farmer identity changes across restarts (auth toggling between the real
+    // sign-in user and the dev identity), the new identity still gets its demo
+    // content. A global count check is what made listings "disappear" — the
+    // rows existed under the old id, so nothing re-seeded for the new one.
+    const farmerListings = await sql<{ n: number }>`
+      select count(*)::int as n from listings where farmer_id = ${farmerId}
+    `;
+    if ((farmerListings[0]?.n ?? 0) === 0 && farmerId) {
       await sql`
         insert into listings (farmer_id, crop, quantity, unit, unit_price_ugx, district, subcounty, description, farm_name, phone, harvest_date, quality_grade, status)
         values
@@ -136,16 +143,28 @@ export async function runDemoSeed(): Promise<{ seeded: boolean }> {
           (${farmerId}, ${"Matooke"}, ${40}, ${"bunches"}, ${25000}, ${"Masaka"}, ${"Bukoto"}, ${"Green cooking bananas, sorted by size."}, ${"Nakato Family Farm"}, ${"0700111222"}, ${"2026-11-02"}, ${"Sorted"}, ${"live"}),
           (${farmerId}, ${"Robusta Coffee"}, ${120}, ${"kg"}, ${8500}, ${"Mukono"}, ${"Ntenjeru"}, ${"Dried cherry, awaiting the next mill slot."}, ${"Nakato Family Farm"}, ${"0700111222"}, ${"2026-10-20"}, ${"Dried"}, ${"pending"})
       `;
-      await sql`
-        insert into loans (member_id, amount_ugx, purpose, term_months, status)
-        values (${farmerId}, ${800000}, ${"Drying racks and two extra tarpaulins before the rains."}, ${6}, ${"pending"})
+      const farmerLoans = await sql<{ n: number }>`
+        select count(*)::int as n from loans where member_id = ${farmerId}
       `;
-      await sql`
-        insert into savings_ledger (member_id, kind, amount_ugx, note, officer_id)
-        values
-          (${farmerId}, ${"deposit"}, ${450000}, ${"Opening savings"}, ${ids["officer.demo@akatale.ug"]}),
-          (${ids["buyer.demo@akatale.ug"]}, ${"deposit"}, ${200000}, ${"Buyer float"}, ${ids["officer.demo@akatale.ug"]})
+      if ((farmerLoans[0]?.n ?? 0) === 0) {
+        await sql`
+          insert into loans (member_id, amount_ugx, purpose, term_months, status)
+          values (${farmerId}, ${800000}, ${"Drying racks and two extra tarpaulins before the rains."}, ${6}, ${"pending"})
+        `;
+      }
+      const buyerId = ids["buyer.demo@akatale.ug"];
+      const officerId = ids["officer.demo@akatale.ug"];
+      const farmerSavings = await sql<{ n: number }>`
+        select count(*)::int as n from savings_ledger where member_id = ${farmerId}
       `;
+      if ((farmerSavings[0]?.n ?? 0) === 0) {
+        await sql`
+          insert into savings_ledger (member_id, kind, amount_ugx, note, officer_id)
+          values
+            (${farmerId}, ${"deposit"}, ${450000}, ${"Opening savings"}, ${officerId}),
+            (${buyerId}, ${"deposit"}, ${200000}, ${"Buyer float"}, ${officerId})
+        `;
+      }
     }
 
     // Demo farm production records (Farm360 side of the merge): a farm, module
@@ -207,7 +226,9 @@ export async function runDemoSeed(): Promise<{ seeded: boolean }> {
           values (${urea.id}, ${farmId}, ${farmerId}, ${50}, ${"Two 25kg bags before top-dressing"}, ${"2026-11-18"})
         `;
       }
-      const notifCount = await sql<{ n: number }>`select count(*)::int as n from notifications`;
+      const notifCount = await sql<{ n: number }>`
+        select count(*)::int as n from notifications where user_id = ${farmerId}
+      `;
       if ((notifCount[0]?.n ?? 0) === 0) {
         const buyerId = ids["buyer.demo@akatale.ug"];
         const officerId = ids["officer.demo@akatale.ug"];

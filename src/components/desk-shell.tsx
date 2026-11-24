@@ -11,7 +11,6 @@ import {
   Menu,
   MessageCircleQuestion,
   Package,
-  Plus,
   Search,
   Settings,
   ShieldCheck,
@@ -57,6 +56,7 @@ import {
   SheetTrigger,
 } from "@/components/overlays";
 import { Avatar, Button } from "@/components/ui";
+import { FarmMenuProvider, FarmSwitchItems, useFarmMenu } from "@/components/farm-menu";
 import type { AppUser } from "@/lib/auth/use-current-user";
 import {
   listNotifications,
@@ -109,8 +109,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "The farm",
     items: [
-      { to: "/desk/farm", label: "Farm records", icon: Tractor },
-      { to: "/desk/advice", label: "AI agronomist", icon: MessageCircleQuestion },
+      // Farm records and the AI agronomist are farmer tools — buyers and SACCO
+      // officers don't keep farm records (server functions enforce this too).
+      { to: "/desk/farm", label: "Farm records", icon: Tractor, roles: ["farmer", "admin"] },
+      {
+        to: "/desk/advice",
+        label: "AI agronomist",
+        icon: MessageCircleQuestion,
+        roles: ["farmer", "admin"],
+      },
     ],
   },
   {
@@ -118,13 +125,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { to: "/market", label: "Marketplace", icon: Store },
       { to: "/desk/sell", label: "My listings", icon: Sprout, roles: ["farmer", "admin"] },
-      { to: "/desk/orders", label: "Orders", icon: Package },
+      { to: "/desk/orders", label: "Orders", icon: Package, roles: ["buyer", "farmer", "admin"] },
     ],
   },
   {
     label: "Money",
     items: [
-      { to: "/desk/loans", label: "Loans", icon: HandCoins },
+      // Loan applications and repayments belong to farmers (with the officer's
+      // ledger and admin oversight) — buyers request orders, not loans.
+      { to: "/desk/loans", label: "Loans", icon: HandCoins, roles: ["farmer", "officer", "admin"] },
       { to: "/desk/sacco", label: "SACCO book", icon: Landmark },
     ],
   },
@@ -160,9 +169,9 @@ const PAGE_TITLES: Record<string, string> = {
 
 const MOBILE_NAV: NavItem[] = [
   { to: "/desk", label: "Desk", icon: LayoutDashboard },
-  { to: "/desk/farm", label: "Farm", icon: Tractor },
+  { to: "/desk/farm", label: "Farm", icon: Tractor, roles: ["farmer", "admin"] },
   { to: "/market", label: "Market", icon: Store },
-  { to: "/desk/orders", label: "Orders", icon: Package },
+  { to: "/desk/orders", label: "Orders", icon: Package, roles: ["buyer", "farmer", "admin"] },
   { to: "/desk/account", label: "Account", icon: Settings },
 ];
 
@@ -208,60 +217,62 @@ export function DeskShell({
 
   return (
     <DeskSessionContext.Provider value={session}>
-      <AccountSwitchProvider>
-        <div className="min-h-screen bg-canvas">
-          <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] lg:block">
-            <SidebarContent session={session} groups={groups} />
-          </aside>
+      <FarmMenuProvider userId={session.profile.userId}>
+        <AccountSwitchProvider>
+          <div className="min-h-screen bg-canvas">
+            <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] lg:block">
+              <SidebarContent session={session} groups={groups} />
+            </aside>
 
-          <div className="lg:pl-[264px]">
-            <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur-md">
-              <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                  <SheetTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="lg:hidden"
-                      aria-label="Open navigation"
-                    >
-                      <Menu className="size-5" />
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-[286px] max-w-[86vw] p-0">
-                    <SidebarContent
-                      session={session}
-                      groups={groups}
-                      onNavigate={() => setMobileOpen(false)}
-                      withClose
-                    />
-                  </SheetContent>
-                </Sheet>
+            <div className="lg:pl-[264px]">
+              <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur-md">
+                <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+                  <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                    <SheetTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="lg:hidden"
+                        aria-label="Open navigation"
+                      >
+                        <Menu className="size-5" />
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="w-[286px] max-w-[86vw] p-0">
+                      <SidebarContent
+                        session={session}
+                        groups={groups}
+                        onNavigate={() => setMobileOpen(false)}
+                        withClose
+                      />
+                    </SheetContent>
+                  </Sheet>
 
-                <div className="hidden min-w-0 items-center gap-2 sm:flex">
-                  <span className="font-mono text-[9.5px] tracking-[0.14em] text-muted uppercase">
-                    Desk
-                  </span>
-                  <span className="text-muted-soft">/</span>
-                  <span className="truncate text-[13px] font-semibold text-ink">{title}</span>
+                  <div className="hidden min-w-0 items-center gap-2 sm:flex">
+                    <span className="font-mono text-[9.5px] tracking-[0.14em] text-muted uppercase">
+                      Desk
+                    </span>
+                    <span className="text-muted-soft">/</span>
+                    <span className="truncate text-[13px] font-semibold text-ink">{title}</span>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+                    <QuickFind groups={groups} />
+                    <NotificationBell />
+                    <UserMenu session={session} />
+                  </div>
                 </div>
+              </header>
 
-                <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-                  <QuickFind groups={groups} />
-                  <NotificationBell />
-                  <UserMenu session={session} />
-                </div>
-              </div>
-            </header>
+              <main className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">
+                {children}
+              </main>
+            </div>
 
-            <main className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">
-              {children}
-            </main>
+            <MobileTabBar session={session} pathname={pathname} />
           </div>
-
-          <MobileTabBar session={session} pathname={pathname} />
-        </div>
-      </AccountSwitchProvider>
+        </AccountSwitchProvider>
+      </FarmMenuProvider>
     </DeskSessionContext.Provider>
   );
 }
@@ -280,8 +291,14 @@ function SidebarContent({
   withClose?: boolean;
 }) {
   const { profile } = session;
+  const { activeFarmName } = useFarmMenu();
+  // The card names the ACTIVE farm (updated the moment one is created and
+  // picked); before any farm is chosen it falls back to the profile's farm or
+  // the person's name.
   const workspace =
-    profile.farmName ?? (profile.role === "admin" ? "Farmer 360 desk" : profile.fullName);
+    activeFarmName ??
+    profile.farmName ??
+    (profile.role === "admin" ? "Farmer 360 desk" : profile.fullName);
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -330,13 +347,12 @@ function SidebarContent({
           <DropdownMenuContent className="w-64" align="start" side="top">
             <AccountIdentityHeader session={session} />
             <DropdownSeparator />
+            {/* Farms first: pick the active farm or add one — creation shows
+                up here instantly (the provider reloads the list). */}
+            <FarmSwitchItems />
+            <DropdownSeparator />
             <AccountSwitchItems session={session} />
             <DropdownSeparator />
-            <DropdownItem asChild>
-              <Link to="/desk/farm" search={{ new: 1 }}>
-                <Plus className="size-3.5" /> Add a new farm
-              </Link>
-            </DropdownItem>
             <DropdownItem asChild>
               <Link to="/desk/farm">
                 <Tractor className="size-3.5" /> Farm records
@@ -477,6 +493,9 @@ function MobileTabBar({ session, pathname }: { session: DeskSessionValue; pathna
                 <SheetContent side="bottom" className="gap-0 p-0">
                   <div className="border-b border-white/10 px-4 py-3.5">
                     <AccountIdentityHeader session={session} />
+                  </div>
+                  <div className="px-3 pt-1">
+                    <FarmSwitchItems variant="rows" onNavigate={() => setAccountOpen(false)} />
                   </div>
                   <div className="px-3 pb-1 pt-2">
                     <AccountSwitchItems session={session} variant="rows" />
@@ -759,6 +778,10 @@ function UserMenu({ session }: { session: DeskSessionValue }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64">
         <AccountIdentityHeader session={session} />
+        <DropdownSeparator />
+        {/* Farms first — switching the active farm is the top-right menu's
+            primary job; accounts come below. */}
+        <FarmSwitchItems />
         <DropdownSeparator />
         <DropdownItem asChild>
           <Link to="/desk/account">
