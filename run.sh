@@ -6,7 +6,8 @@
 #      packages that have newer versions available (npm outdated). Updates
 #      are REPORTED, never applied automatically.
 #   2. Postgres check — uses DATABASE_URL if set; otherwise looks for a local
-#      Postgres (starting the .localdb cluster if it is merely stopped) and
+#      Postgres: uses a running one, starts the .localdb cluster if it is
+#      merely stopped, or initializes a fresh cluster if none exists yet, and
 #      applies migrations. If no Postgres can be reached, the app falls back
 #      to its embedded PGLite database.
 #   3. Build check — runs a full production build purely as an error scan.
@@ -99,6 +100,24 @@ case "${DATABASE_URL:-}" in
           OK "local Postgres started"
         else
           ERR "could not start local Postgres — see /tmp/pg-server.log"
+          note_problem
+        fi
+      else
+        # Postgres is installed but no cluster exists yet (fresh machine or a
+        # deleted .localdb) — initialize one so real Postgres is used instead
+        # of silently dropping to the throwaway PGLite database.
+        LOG "no local cluster at .localdb/pgdata — initializing a fresh one…"
+        mkdir -p "$PGDATA"
+        if "$PG_BIN_DIR/initdb" -D "$PGDATA" -U "$(id -un)" -A trust -E UTF8 >/tmp/pg-initdb.log 2>&1; then
+          OK "fresh cluster initialized at .localdb/pgdata"
+          if "$PG_BIN_DIR/pg_ctl" -D "$PGDATA" -l /tmp/pg-server.log -w start >/dev/null 2>&1; then
+            OK "local Postgres started"
+          else
+            ERR "could not start the fresh cluster — see /tmp/pg-server.log"
+            note_problem
+          fi
+        else
+          ERR "initdb failed — see /tmp/pg-initdb.log"
           note_problem
         fi
       fi
