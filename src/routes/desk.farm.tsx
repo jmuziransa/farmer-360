@@ -33,7 +33,6 @@ import {
   type Farm,
   type FarmEntry,
   type InventoryItem,
-  type StockMovement,
 } from "@/lib/farm.functions";
 import {
   displayDate,

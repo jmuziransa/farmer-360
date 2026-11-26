@@ -125,7 +125,7 @@ function Home() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {STEPS.map((step, index) => (
+            {STEPS.map((step, _index) => (
               <Card key={step.title} className="surface-hover">
                 <CardContent className="p-5">
                   <span className="grid size-9 place-items-center rounded-md border border-primary/15 bg-primary-xsoft text-primary">

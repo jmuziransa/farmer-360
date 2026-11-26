@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Package, ShoppingBasket } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useDeskSession } from "@/components/desk-shell";
 import { Tabs, TabsList, TabsTrigger } from "@/components/overlays";
 import {
   Badge,

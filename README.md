@@ -84,13 +84,14 @@ all safe to run with sudo — they re-execute as the normal user, because Postgr
 
 ```sh
 ./startup.sh       # fresh machine / Codespace: installs Postgres if missing, starts the
-                   # database (Supabase/Neon URL, local cluster on 5432/5433, or the
-                   # embedded PGLite fallback), starts the app in the background and
-                   # verifies it responds on 0.0.0.0:8080
+                   # database (DATABASE_URL from .env — Supabase/Neon/Docker — local
+                   # cluster on 5432/5433, or the embedded PGLite fallback), starts
+                   # the app in the background and verifies it responds on 0.0.0.0:8080
 ./run.sh           # daily dev run: dependency + build checks (report-only), database
                    # start/init + migrations, app in the foreground
-./update.sh        # applies safe dependency updates (npm update) + full verification
-                   # sweep (typecheck, lint, tests, build) — never starts the app
+./update.sh        # pulls the latest code (fast-forward), applies safe dependency
+                   # updates (npm update) + full verification sweep (typecheck, lint,
+                   # tests, build) — never starts the app
 ```
 
 or, without any provisioning:
@@ -107,19 +108,70 @@ npm run typecheck  # tsc --noEmit (strict)
 npm test           # node --test: unit tests + template infrastructure tests
 npm run build      # production build (also applies migrations to DATABASE_URL when set)
 npm run preview    # serve the built output on 127.0.0.1:8081
+npm run db:status  # report every configured database: reachable? migrations? rows?
 ```
 
 ## Configuration
 
 | Variable | Where | Effect |
 | --- | --- | --- |
-| `DATABASE_URL` | server env | Switch from PGLite to a real Postgres (e.g. Neon). No code changes needed. |
+| `DATABASE_URL` | `.env` (preferred) or server env | Switch from PGLite to a real Postgres — Supabase, Neon, a Docker container, anything `postgres://`. No code changes needed. |
+| `SYNC_SOURCE_URL` / `SYNC_TARGET_URL` | `.env` | Optional second database for `npm run db:sync` (see Databases below). |
 | `VITE_AUTH_ENABLED` | `.grok/app-env.json` locally, provider env on deploy | This app ships `"true"` (real email/password sign-in). `"false"` = shared dev user, only works without a database. |
 | `XAI_API_KEY` | server env | Enables the AI agronomist through xAI's OpenAI-compatible API (default model `grok-4.3`). |
 | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | server env | Alternative provider, any OpenAI-compatible endpoint. Used only when `XAI_API_KEY` is absent. |
 | `AI_MODEL` | server env | Override the default model for either provider. |
 
 Without an AI key the advice page shows a clear "not configured" state; nothing is faked.
+
+## Databases (`.env`, local Postgres, Supabase, and sync)
+
+Database choice lives in **`.env`** (gitignored — copy `.env.example` to start).
+Nothing is hardcoded; a variable exported in your shell always wins over the file.
+Every entry point reads it: `npm run dev/build/preview`, `npm run db:migrate`,
+`./run.sh`, `./startup.sh`, `./update.sh`, and the sync/status tools.
+
+```sh
+cp .env.example .env
+# then edit .env, e.g. for the Docker Postgres created in the Codespace:
+#   DATABASE_URL=postgresql://farmer:YOUR_PASSWORD@127.0.0.1:5432/farmer360
+```
+
+Resolution order — the first match wins:
+
+1. **`DATABASE_URL`** (any real Postgres: Docker, Supabase, Neon, self-hosted).
+   It is verified reachable before use; a dead `127.0.0.1` URL even gets one
+   best-effort `docker start farmer360-db` attempt.
+2. **Local Postgres** — `./run.sh` uses a server already on port 5432, or
+   starts/initialises the app's own cluster in `.localdb/pgdata` (created as
+   the normal user, never root), creating the `farmer360` database and
+   applying migrations. `./startup.sh` additionally installs Postgres via
+   apt/dnf/yum/apk when the machine has none.
+3. **Embedded PGLite** — automatic fallback, zero setup, self-migrating, but
+   data resets on every dev-server restart.
+
+### Connecting to more than one database (sync)
+
+Set an optional second database and copy everything between them — develop on
+the Docker Postgres, then push into Supabase for production, or back the other
+way:
+
+```sh
+# .env
+#   SYNC_SOURCE_URL=postgresql://farmer:PASS@127.0.0.1:5432/farmer360
+#   SYNC_TARGET_URL=postgresql://postgres.PROJ:PASS@aws-0-eu.pooler.supabase.com:6543/postgres
+
+npm run db:status              # what is configured, what is reachable, row counts
+npm run db:sync -- --dry-run   # preview: which tables, how many rows
+npm run db:sync                # apply migrations to the target, then copy every
+                               # table (foreign-key order, ids preserved,
+                               # sequences rebased). The TARGET is overwritten.
+```
+
+The source defaults to `DATABASE_URL` when only `SYNC_TARGET_URL` is set;
+`--from`/`--to` override everything for a one-off. Both sides must be real
+Postgres servers — the in-memory PGLite fallback cannot be synced from outside
+the app process.
 
 ## Deploying
 

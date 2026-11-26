@@ -10,11 +10,28 @@
 # therefore calls drop_root "$@" first, which re-executes as the user who
 # invoked sudo.
 #
+# Configuration (nothing is hardcoded — pick a database in `.env`):
+#   DATABASE_URL     primary Postgres. Supabase / Neon / any hosted URL, or a
+#                    local one, e.g. the Docker container farmer360-db:
+#                    postgresql://farmer:PASSWORD@127.0.0.1:5432/farmer360
+#   SYNC_SOURCE_URL  optional — database `npm run db:sync` copies FROM
+#   SYNC_TARGET_URL  optional — database `npm run db:sync` copies TO
+#   .env is gitignored; a real exported variable always beats the file.
+#
+# Resolution order (resolve_database):
+#   1. DATABASE_URL (from env or .env) — verified reachable when psql exists;
+#      a dead 127.0.0.1:5432 URL gets one `docker start farmer360-db` attempt.
+#   2. A local Postgres — cluster under .localdb/ (initialised as the normal
+#      user, NEVER root), port 5432 or 5433 when something else owns 5432.
+#   3. (startup.sh only) Postgres installed via the system package manager.
+#   4. None of the above — the app falls back to its embedded PGLite database.
+#
 # After this library is used the caller can rely on:
 #   DATABASE_URL — set when a usable Postgres was found and migrated
 #   PG_READY     — 1 when DATABASE_URL is live, 0 when the app must fall back
 #                  to the embedded PGLite database
 #   DB_PROBLEMS  — count of database problems seen (scripts report it)
+#   DB_SUMMARY   — one-line description of the active database, for banners
 
 # Fallback logger so the library also works when sourced standalone.
 if ! command -v log >/dev/null 2>&1; then
@@ -35,6 +52,44 @@ drop_root() {
     exec sudo -u "$SUDO_USER" sh "$0" "$@"
   fi
   log "WARNING: running as root — initdb will refuse, so local Postgres is skipped"
+}
+
+# ── .env / .env.local loader (shell twin of scripts/load-dotenv.mjs) ─────────
+# Sets keys that are not already in the environment, so an exported variable
+# always wins. Keys are charset-validated before use; values are never eval'd.
+# Load order .env.local THEN .env gives the precedence env > .env.local > .env.
+load_dotenv_file() {
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%"${line##*[!     ]}"}          # rtrim spaces/tabs
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key=${line%%=*}
+    key=${key#"${key%%[!         ]}*"}              # ltrim spaces/tabs
+    case "$key" in
+      *[!A-Za-z0-9_]*|'') continue ;;        # reject weird key names
+    esac
+    [ "$key" = "DATABASE_URL" ] && DOTENV_SET_DATABASE_URL=1
+    val=${line#*=}
+    val=${val#"${val%%[!         ]}*"}              # ltrim spaces/tabs
+    case "$val" in
+      '"'*) case "$val" in
+              '"'*'"') val=${val#\"}; val=${val%\"} ;;
+            esac ;;
+      "'"*) case "$val" in
+              "'"*"'") val=${val#\'}; val=${val%\'} ;;
+            esac ;;
+    esac
+    # Only set when the environment does not already carry the key.
+    if eval "[ -z \"\${$key+x}\" ]"; then
+      export "$key=$val"
+    fi
+  done < "$1"
+}
+
+load_dotenv() {
+  load_dotenv_file .env.local
+  load_dotenv_file .env
 }
 
 # ── Locate an existing Postgres installation ─────────────────────────────────
@@ -74,6 +129,50 @@ install_pg() {
   fi
 }
 
+# ── Verify a DATABASE_URL actually accepts connections ───────────────────────
+# Uses psql when available (PGCONNECT_TIMEOUT bounds the wait). Sets
+# URL_OK=1 on success, plus URL_HOST/URL_PORT for reporting. When the URL
+# points at localhost and nothing answers, one best-effort
+# `docker start farmer360-db` is attempted before giving up.
+verify_database_url() {
+  URL="$1"
+  URL_OK=0
+  [ -n "$URL" ] || return 1
+
+  # postgres://user:pass@host:port/db  ->  host + port (port defaults to 5432)
+  URL_AUTH=$(printf '%s' "$URL" | sed -n 's|^postgres\(ql\)\{0,1\}://\([^/?]*\).*$|\2|p')
+  URL_HOST=${URL_AUTH##*@}
+  case "$URL_HOST" in
+    *:*) URL_PORT=${URL_HOST##*:}; URL_HOST=${URL_HOST%%:*} ;;
+    *)   URL_PORT=5432 ;;
+  esac
+  [ -n "$URL_HOST" ] || URL_HOST="(unparsed)"
+
+  if command -v psql >/dev/null 2>&1; then
+    if PGCONNECT_TIMEOUT=4 psql "$URL" -c "select 1" >/dev/null 2>&1; then
+      URL_OK=1
+    else
+      # Dead localhost URL — try to revive the Docker Postgres container once.
+      if [ "$URL_HOST" = "127.0.0.1" ] || [ "$URL_HOST" = "localhost" ]; then
+        if command -v docker >/dev/null 2>&1 \
+           && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^farmer360-db$' \
+           && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^farmer360-db$'; then
+          log "nothing answers on $URL_HOST:$URL_PORT — trying 'docker start farmer360-db'"
+          docker start farmer360-db >/dev/null 2>&1 || true
+          sleep 2
+          if PGCONNECT_TIMEOUT=4 psql "$URL" -c "select 1" >/dev/null 2>&1; then
+            URL_OK=1
+          fi
+        fi
+      fi
+    fi
+  else
+    # No psql to verify with — trust the URL; migrations will check it.
+    URL_OK=1
+  fi
+  [ "$URL_OK" = 1 ]
+}
+
 # ── Role probe: first role that can connect to the server at 127.0.0.1:$2 ────
 # Sets DB_ROLE on success. Local clusters we create use trust auth, so a
 # successful connect proves the server is one we can use.
@@ -103,10 +202,13 @@ ensure_local_pg() {
         -c "create database farmer360" >/dev/null 2>&1 || true
       DATABASE_URL="postgresql://$DB_ROLE@127.0.0.1:5432/farmer360"
       export DATABASE_URL
+      DB_SUMMARY="local Postgres on 127.0.0.1:5432/farmer360 (role '$DB_ROLE')"
       log "local Postgres ready — DATABASE_URL=$DATABASE_URL"
       return 0
     fi
-    log "port 5432 is taken by another Postgres (auth fails) — our cluster will use port 5433"
+    log "port 5432 is taken by a Postgres we cannot log in to (password-protected?)"
+    log "         if that is your Docker 'farmer360-db', put its URL in .env as DATABASE_URL"
+    log "         (see .env.example) — otherwise our own cluster will use port 5433"
     PGPORT=5433
   fi
 
@@ -149,20 +251,39 @@ ensure_local_pg() {
     -c "create database farmer360" >/dev/null 2>&1 || true
   DATABASE_URL="postgresql://$DB_ROLE@127.0.0.1:$PGPORT/farmer360"
   export DATABASE_URL
+  DB_SUMMARY="local Postgres on 127.0.0.1:$PGPORT/farmer360 (own cluster in .localdb/)"
   log "local Postgres ready — DATABASE_URL=$DATABASE_URL"
 }
 
-# ── Full resolution: hosted URL → local cluster → (install) → PGLite ─────────
+# ── Full resolution: .env → hosted URL → local cluster → (install) → PGLite ──
 # $1 = AUTO_INSTALL: 1 lets the script apt/dnf/yum/apk install Postgres
 #      (startup.sh), 0 only reports when none is found (run.sh, update.sh).
 resolve_database() {
   AUTO_INSTALL="${1:-0}"
   PG_READY=0
+  DB_SUMMARY="embedded PGLite (in-app fallback, resets on restart)"
+
+  load_dotenv
 
   case "${DATABASE_URL:-}" in
     postgres://* | postgresql://*)
-      log "using DATABASE_URL (hosted Postgres)"
-      PG_READY=1
+      DOTENV_SET_DATABASE_URL="${DOTENV_SET_DATABASE_URL:-0}"
+      if [ "$DOTENV_SET_DATABASE_URL" = 1 ]; then
+        log "using DATABASE_URL from .env"
+      else
+        log "using DATABASE_URL (hosted Postgres)"
+      fi
+      if verify_database_url "$DATABASE_URL"; then
+        PG_READY=1
+        DB_SUMMARY="Postgres via DATABASE_URL ($URL_HOST:$URL_PORT)"
+      else
+        db_problem
+        log "DATABASE_URL is set but the server does not accept connections:"
+        log "         $URL_HOST:$URL_PORT — check the URL, the password, and that the server is up"
+        log "         (Docker: docker start farmer360-db — Supabase/Neon: check the dashboard)"
+        log "continuing without it — trying a local Postgres next"
+        unset DATABASE_URL
+      fi
       ;;
     "")
       log "DATABASE_URL not set — looking for local Postgres"
@@ -192,6 +313,7 @@ resolve_database() {
       log "full log: /tmp/db-migrate.log"
       unset DATABASE_URL
       PG_READY=0
+      DB_SUMMARY="embedded PGLite (migration failed — see /tmp/db-migrate.log)"
       db_problem
     fi
   fi

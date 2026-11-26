@@ -6,23 +6,42 @@
  * in ../migrations to DATABASE_URL. Each file is applied in one transaction and
  * recorded in a `_migrations` table, so it runs once and is safe to re-run.
  *
+ * `DATABASE_URL` comes from the real environment OR from `.env` / `.env.local`
+ * in the project root (loaded below — same rules as `npm run dev`).
+ *
  * The read is non-recursive, so the opt-in auth schema under migrations/auth/
  * is not applied to an app that never asked for sign-in.
  *
- * No DATABASE_URL (local / preview builds) -> skip; the PGLite fallback applies
- * the same files at startup instead (see src/lib/db.ts).
+ * No usable DATABASE_URL (local / preview builds, or a non-postgres value)
+ * -> skip; the PGLite fallback applies the same files at startup instead
+ * (see src/lib/db.ts).
  */
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
+import { loadDotenvIntoProcess } from "./load-dotenv.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
+loadDotenvIntoProcess();
+
+/**
+ * Only a real Postgres URL (`postgres://` / `postgresql://`) is usable. Anything
+ * else (a leftover `file:` URL, `mysql:`, whitespace) counts as unset — handing
+ * it to node-postgres just produces a confusing ECONNREFUSED against
+ * localhost:5432. Mirrors isPostgresUrl() in src/lib/db.ts.
+ */
+function usableDatabaseUrl(raw) {
+  const url = raw?.trim();
+  return url && /^postgres(ql)?:\/\//.test(url) ? url : undefined;
+}
+
+const databaseUrl = usableDatabaseUrl(process.env.DATABASE_URL);
 if (!databaseUrl) {
-  console.log(
-    "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
-  );
+  if (process.env.DATABASE_URL?.trim()) {
+    console.log("[migrate] DATABASE_URL is set but is not a postgres:// URL — ignoring it.");
+  }
+  console.log("[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).");
   process.exit(0);
 }
 
@@ -48,9 +67,7 @@ async function main() {
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
-    const applied = (await client.query("SELECT name FROM _migrations")).rows.map(
-      (r) => r.name,
-    );
+    const applied = (await client.query("SELECT name FROM _migrations")).rows.map((r) => r.name);
 
     let count = 0;
     for (const { name } of pendingMigrations(entries, applied)) {
@@ -73,7 +90,9 @@ async function main() {
       console.log(`[migrate] applied ${name}`);
       count += 1;
     }
-    console.log(count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.");
+    console.log(
+      count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.",
+    );
   } finally {
     client.release();
     await pool.end();

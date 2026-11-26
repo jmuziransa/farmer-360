@@ -7,9 +7,16 @@
  * `VITE_AUTH_ENABLED` — a divergence that only shows up as a built-output
  * mismatch long after the fact. Anything that starts Vite directly bypasses it.
  *
- * Only `VITE_`-prefixed keys are honored: the file is a build flag carrier, not
- * a secret store, and only `VITE_` vars reach the browser anyway. A real
- * `process.env` entry always wins, so an explicit override still works.
+ * Only `VITE_`-prefixed keys from the JSON are honored: that file is a build
+ * flag carrier, not a secret store, and only `VITE_` vars reach the browser
+ * anyway. A real `process.env` entry always wins, so an explicit override
+ * still works.
+ *
+ * On top of that, the standard `.env` / `.env.local` files are loaded into the
+ * child environment (server-side keys like `DATABASE_URL`, `SYNC_SOURCE_URL`,
+ * `SYNC_TARGET_URL` included — Vite still only exposes `VITE_*` to the
+ * browser, so secrets in `.env` never reach client code). Precedence:
+ * process env > .env.local > .env > app-env.json.
  *
  * That precedence also means the file governs this workspace only. A deployed
  * build runs with the provider's project env, where the deployer sets
@@ -24,6 +31,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readDotenv } from "./load-dotenv.mjs";
 
 export const APP_ENV_REL_PATH = ".grok/app-env.json";
 
@@ -110,7 +118,12 @@ function main(argv) {
     console.error("usage: node scripts/with-app-env.mjs <command> [args…]");
     process.exit(2);
   }
-  const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
+  const root = projectRoot();
+  // app-env.json (VITE_ flags) < .env / .env.local < real process env.
+  const env = mergeAppEnv(readAppEnv(root), {
+    ...readDotenv(root),
+    ...process.env,
+  });
   const child = spawn(command, args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {

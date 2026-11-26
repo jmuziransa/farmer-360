@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Camera, MapPin, Search, ShoppingBasket, Sprout, Store } from "lucide-react";
+import { MapPin, Search, ShoppingBasket, Sprout, Store } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MarketingFooter, MarketingHeader } from "@/components/brand";
-import { Dialog, DialogContent, DialogHeader, Sheet, SheetContent } from "@/components/overlays";
+import { Dialog, DialogContent, DialogHeader } from "@/components/overlays";
 import { Badge, Button, Card, CardContent, EmptyState, Field, Input, Textarea } from "@/components/ui";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getMyProfile, listLiveListings, placeOrder, type Listing, type Profile } from "@/lib/market.functions";

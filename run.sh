@@ -8,11 +8,12 @@
 #      packages that have newer versions available (npm outdated). Updates
 #      are REPORTED, never applied automatically (use ./update.sh for that).
 #   3. Postgres check — shared logic from scripts/lib-db.sh: uses DATABASE_URL
-#      if set, otherwise uses/starts/initialises a local cluster on port 5432
-#      (or 5433 if something else owns 5432) and applies migrations. It does
-#      NOT install Postgres itself — run ./startup.sh on a machine that has
-#      none. If no Postgres can be reached, the app falls back to its
-#      embedded PGLite database.
+#      if set (from .env or the environment — Supabase, Neon, the Docker
+#      farmer360-db container, …), otherwise uses/starts/initialises a local
+#      cluster on port 5432 (or 5433 if something else owns 5432) and applies
+#      migrations. It does NOT install Postgres itself — run ./startup.sh on a
+#      machine that has none. If no Postgres can be reached, the app falls back
+#      to its embedded PGLite database.
 #   4. Build check — runs a full production build purely as an error scan.
 #      If it finds errors they are printed to the terminal, but the script
 #      DOES NOT STOP: it always goes on to start the dev server.
@@ -101,6 +102,7 @@ else
   echo " [run] $PROBLEMS check(s) reported problems above — starting anyway"
 fi
 echo " app:      http://localhost:8080"
+echo " database: ${DB_SUMMARY:-see [db] messages above}"
 echo " dev log:  the terminal you are in (Ctrl+C stops the server)"
 echo "=============================================================="
 

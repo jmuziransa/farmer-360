@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthError, AuthShell } from "@/components/auth-shell";
-import { Button, Card, Field, Input, Select } from "@/components/ui";
+import { Button, Card, Field, Input } from "@/components/ui";
 import { authClient } from "@/lib/auth/client";
 import { DEMO_ACCOUNTS, type DemoAccount } from "@/lib/demo";
 import { seedDesk } from "@/lib/market.functions";

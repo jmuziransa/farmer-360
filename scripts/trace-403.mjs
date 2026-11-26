@@ -1,5 +1,4 @@
 import { chromium } from "playwright";
-import { existsSync } from "node:fs";
 const browser = await chromium.launch({ executablePath: "/home/z/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome" });
 const page = await browser.newPage();
 page.on("response", (r) => { if (r.status() >= 400) console.log("HTTP", r.status(), r.request().method(), r.url().slice(0, 130)); });

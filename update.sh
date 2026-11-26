@@ -6,6 +6,8 @@
 #   update.sh = periodic UPDATE → actually applies updates, then verifies everything
 #
 # What it does:
+#   0. Pulls the latest code from git (fast-forward only; reinstalls the
+#      dependency tree when package-lock.json moved).
 #   1. Updates npm dependencies WITHIN the version ranges in package.json
 #      (`npm update` — safe: no new major versions). Major upgrades are only
 #      REPORTED, never applied, because they can break the app.
@@ -42,6 +44,36 @@ fi
 echo "=============================================================="
 echo " Farmer 360 update — $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================================================="
+
+# ── 0. Pull the latest code (fast-forward only — never a merge) ──────────────
+LOG "checking git for upstream updates…"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  if [ -n "$BRANCH" ] && git fetch origin >/tmp/update-git.log 2>&1; then
+    BEHIND=$(git rev-list --count "HEAD..origin/$BRANCH" 2>/dev/null || echo 0)
+    if [ "$BEHIND" -gt 0 ]; then
+      LOG "pulling $BEHIND commit(s) from origin/$BRANCH (fast-forward only)…"
+      if git pull --ff-only >>/tmp/update-git.log 2>&1; then
+        OK "code updated to $(git rev-parse --short HEAD)"
+        if git diff --name-only 'HEAD@{1}' HEAD 2>/dev/null | grep -q '^package-lock.json$'; then
+          LOG "package-lock.json changed — reinstalling exact dependency tree…"
+          npm ci --no-audit --no-fund >>/tmp/update-install.log 2>&1 \
+            && OK "dependencies reinstalled from the lockfile" \
+            || { ERR "npm ci failed — see /tmp/update-install.log"; note_problem; }
+        fi
+      else
+        WARN "git pull --ff-only failed (local commits?) — see /tmp/update-git.log"
+        note_problem
+      fi
+    else
+      OK "already up to date with origin/$BRANCH"
+    fi
+  else
+    WARN "git fetch failed (offline / no credentials) — continuing without pulling"
+  fi
+else
+  WARN "not a git repository — skipping the git update"
+fi
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
 LOG "checking npm before updating…"

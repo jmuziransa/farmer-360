@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { MessageCircleQuestion, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useDeskSession } from "@/components/desk-shell";
 import {
   Badge,
   Button,
@@ -31,7 +30,6 @@ import { timeAgo } from "@/lib/utils";
 export const Route = createFileRoute("/desk/advice")({ component: AdvicePage });
 
 function AdvicePage() {
-  const { profile } = useDeskSession();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [category, setCategory] = useState<AdviceCategory>("crops");
   const [question, setQuestion] = useState("");
